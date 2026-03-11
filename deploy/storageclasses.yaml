@@ -1,0 +1,43 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: zerofs
+  labels:
+    app.kubernetes.io/name: csi-driver-zerofs
+provisioner: zerofs.csi.sorend.github.com
+parameters:
+  storageUrl: "s3://zerofs-data"
+  awsSecretName: "zerofs-aws-credentials"
+  awsEndpoint: "http://minio.zerofs-csi.svc.cluster.local:9000"
+  awsAllowHTTP: "true"
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+mountOptions:
+  - nolock
+  - vers=3
+  - tcp
+  - port=2049
+  - mountport=2049
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: zerofs-ninep
+  labels:
+    app.kubernetes.io/name: csi-driver-zerofs
+provisioner: zerofs.csi.sorend.github.com
+parameters:
+  storageUrl: "s3://zerofs-data"
+  awsSecretName: "zerofs-aws-credentials"
+  awsEndpoint: "http://minio.zerofs-csi.svc.cluster.local:9000"
+  awsAllowHTTP: "true"
+  protocol: "ninep"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+mountOptions:
+  - trans=tcp
+  - version=9p2000.L
+  - msize=65536

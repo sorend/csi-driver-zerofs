@@ -17,7 +17,17 @@ kubectl apply -f https://raw.githubusercontent.com/sorend/csi-driver-zerofs/main
 kubectl apply -f https://raw.githubusercontent.com/sorend/csi-driver-zerofs/main/test/minio.yaml
 ```
 
-`install.yaml` creates the `zerofs-csi` namespace, the CSI controller/node, two StorageClasses (`zerofs` and `zerofs-ninep`), and a default credentials secret (`minioadmin` / `minioadmin123`).
+`install.yaml` creates the `zerofs-csi` namespace, the CSI controller/node, and a default credentials secret (`minioadmin` / `minioadmin123`).
+
+### 2. Apply StorageClasses
+
+The example StorageClasses are provided separately. Apply the defaults or use them as a template for your own configuration:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/sorend/csi-driver-zerofs/main/deploy/storageclasses.yaml
+```
+
+This creates two StorageClasses: `zerofs-nfs` (NFS, ReadWriteMany) and `zerofs-ninep` (9P, ReadWriteOnce), both pointing at the MinIO instance deployed above.
 
 ### 2. Create the bucket
 
@@ -29,7 +39,7 @@ kubectl exec -n zerofs-csi deployment/minio -- \
 
 ### 3. Use it
 
-Create a PVC using the `zerofs` StorageClass (NFS, ReadWriteMany):
+Create a PVC using the `zerofs-nfs` StorageClass (NFS, ReadWriteMany):
 
 ```yaml
 apiVersion: v1
@@ -38,7 +48,7 @@ metadata:
   name: my-pvc
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: zerofs
+  storageClassName: zerofs-nfs
   resources:
     requests:
       storage: 10Gi
@@ -63,6 +73,7 @@ Credentials must come from a Secret (raw keys in parameters are ignored).
 ## Uninstall
 
 ```bash
+kubectl delete -f https://raw.githubusercontent.com/sorend/csi-driver-zerofs/main/deploy/storageclasses.yaml
 kubectl delete -f https://raw.githubusercontent.com/sorend/csi-driver-zerofs/main/deploy/install.yaml
 ```
 
