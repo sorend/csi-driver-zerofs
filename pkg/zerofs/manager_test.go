@@ -60,13 +60,15 @@ var _ = ginkgo.Describe("Manager", func() {
 
 	ginkgo.Context("generateConfig", func() {
 		ginkgo.It("should generate valid config with defaults for NFS", func() {
-			config := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, nil, nil)
+			config, err := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, nil, nil)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(config).To(gomega.ContainSubstring("s3://my-bucket/data"))
 			gomega.Expect(config).To(gomega.ContainSubstring("0.0.0.0:2049"))
 		})
 
 		ginkgo.It("should generate valid config for 9P protocol", func() {
-			config := manager.generateConfig("s3://my-bucket/data", ProtocolNinep, nil, nil)
+			config, err := manager.generateConfig("s3://my-bucket/data", ProtocolNinep, nil, nil)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(config).To(gomega.ContainSubstring("s3://my-bucket/data"))
 			gomega.Expect(config).To(gomega.ContainSubstring("0.0.0.0:5564"))
 		})
@@ -75,7 +77,8 @@ var _ = ginkgo.Describe("Manager", func() {
 			secrets := map[string]string{
 				"encryptionPassword": "my-secret-password",
 			}
-			config := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, nil, secrets)
+			config, err := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, nil, secrets)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(config).To(gomega.ContainSubstring("my-secret-password"))
 		})
 
@@ -84,7 +87,8 @@ var _ = ginkgo.Describe("Manager", func() {
 				"cacheDir":    "/custom/cache",
 				"cacheSizeGB": "20",
 			}
-			config := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, params, nil)
+			config, err := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, params, nil)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(config).To(gomega.ContainSubstring("/custom/cache"))
 			gomega.Expect(config).To(gomega.ContainSubstring("disk_size_gb = 20"))
 		})
@@ -93,7 +97,8 @@ var _ = ginkgo.Describe("Manager", func() {
 			params := map[string]string{
 				"awsEndpoint": "http://minio:9000",
 			}
-			config := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, params, nil)
+			config, err := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, params, nil)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(config).NotTo(gomega.ContainSubstring("access_key_id"))
 			gomega.Expect(config).NotTo(gomega.ContainSubstring("secret_access_key"))
 			gomega.Expect(config).NotTo(gomega.ContainSubstring("http://minio:9000"))
@@ -118,21 +123,22 @@ var _ = ginkgo.Describe("Manager", func() {
 			params := map[string]string{
 				"awsSecretName": "aws-credentials",
 			}
-			config := manager.generateConfigWithContext(context.Background(), "s3://my-bucket/data", ProtocolNFS, params, nil)
+			config, err := manager.generateConfigWithContext(context.Background(), "s3://my-bucket/data", ProtocolNFS, params, nil)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(config).To(gomega.ContainSubstring("secret-access-key"))
 			gomega.Expect(config).To(gomega.ContainSubstring("secret-secret-key"))
 		})
 
-		ginkgo.It("should not include credentials when secret fetch fails", func() {
+		ginkgo.It("should return an error when secret fetch fails", func() {
 			fakeClient := fake.NewSimpleClientset()
 			manager.SetClient(fakeClient)
 
 			params := map[string]string{
 				"awsSecretName": "non-existent-secret",
 			}
-			config := manager.generateConfigWithContext(context.Background(), "s3://my-bucket/data", ProtocolNFS, params, nil)
-			gomega.Expect(config).NotTo(gomega.ContainSubstring("access_key_id"))
-			gomega.Expect(config).NotTo(gomega.ContainSubstring("secret_access_key"))
+			_, err := manager.generateConfigWithContext(context.Background(), "s3://my-bucket/data", ProtocolNFS, params, nil)
+			gomega.Expect(err).To(gomega.HaveOccurred())
+			gomega.Expect(err.Error()).To(gomega.ContainSubstring("non-existent-secret"))
 		})
 
 		ginkgo.It("should include effective AWS annotations", func() {
@@ -179,7 +185,8 @@ var _ = ginkgo.Describe("Manager", func() {
 				"awsAccessKeyIDKey":     "my_access_key",
 				"awsSecretAccessKeyKey": "my_secret_key",
 			}
-			config := manager.generateConfigWithContext(context.Background(), "s3://my-bucket/data", ProtocolNFS, params, nil)
+			config, err := manager.generateConfigWithContext(context.Background(), "s3://my-bucket/data", ProtocolNFS, params, nil)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(config).To(gomega.ContainSubstring("custom-access-key"))
 			gomega.Expect(config).To(gomega.ContainSubstring("custom-secret-key"))
 		})
@@ -203,7 +210,8 @@ var _ = ginkgo.Describe("Manager", func() {
 			params := map[string]string{
 				"awsSecretName": "aws-credentials",
 			}
-			config := manager.generateConfigWithContext(context.Background(), "s3://my-bucket/data", ProtocolNFS, params, nil)
+			config, err := manager.generateConfigWithContext(context.Background(), "s3://my-bucket/data", ProtocolNFS, params, nil)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(config).To(gomega.ContainSubstring("default-access-key"))
 			gomega.Expect(config).To(gomega.ContainSubstring("default-secret-key"))
 		})

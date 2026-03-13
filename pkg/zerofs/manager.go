@@ -81,7 +81,10 @@ func (m *Manager) CreateZerofsDeployment(ctx context.Context, volumeID, storageU
 	serviceName := m.GetServiceName(volumeID)
 	secretName := m.GetSecretName(volumeID)
 
-	configData := m.generateConfigWithContext(ctx, storageURL, protocol, params, secrets)
+	configData, err := m.generateConfigWithContext(ctx, storageURL, protocol, params, secrets)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate zerofs config: %w", err)
+	}
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
@@ -376,11 +379,11 @@ func (m *Manager) getAWSCredentialsFromSecret(ctx context.Context, secretName, a
 	return accessKey, secretKey, nil
 }
 
-func (m *Manager) generateConfig(storageURL string, protocol Protocol, params, secrets map[string]string) string {
+func (m *Manager) generateConfig(storageURL string, protocol Protocol, params, secrets map[string]string) (string, error) {
 	return m.generateConfigWithContext(context.Background(), storageURL, protocol, params, secrets)
 }
 
-func (m *Manager) generateConfigWithContext(ctx context.Context, storageURL string, protocol Protocol, params, secrets map[string]string) string {
+func (m *Manager) generateConfigWithContext(ctx context.Context, storageURL string, protocol Protocol, params, secrets map[string]string) (string, error) {
 	encryptionPassword := ""
 	if secrets != nil {
 		encryptionPassword = secrets["encryptionPassword"]
@@ -422,7 +425,7 @@ func (m *Manager) generateConfigWithContext(ctx context.Context, storageURL stri
 		var err error
 		awsAccessKey, awsSecretKey, err = m.getAWSCredentialsFromSecret(ctx, secretName, accessKeyIDKey, secretAccessKeyKey)
 		if err != nil {
-			klog.Warningf("Failed to get AWS credentials from secret %s: %v", secretName, err)
+			return "", fmt.Errorf("failed to get AWS credentials from secret %s: %w", secretName, err)
 		}
 	}
 
@@ -468,7 +471,7 @@ url = "%s"
 encryption_password = "%s"
 %s%s`, cacheDir, cacheSizeGB, storageURL, encryptionPassword, awsSection, serverSection)
 
-	return config
+	return config, nil
 }
 
 func (m *Manager) buildDeployment(name, volumeID, secretName string, protocol Protocol, nodeName string, size int64) *appsv1.Deployment {
