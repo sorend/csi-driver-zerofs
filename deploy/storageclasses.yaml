@@ -9,7 +9,7 @@ provisioner: zerofs.csi.sorend.github.com
 parameters:
   storageUrl: "s3://zerofs-data"
   awsSecretName: "zerofs-aws-credentials"
-  awsEndpoint: "http://minio.zerofs-csi.svc.cluster.local:9000"
+  awsEndpoint: "http://rustfs.zerofs-csi.svc.cluster.local:9000"
   awsAllowHTTP: "true"
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
@@ -31,7 +31,7 @@ provisioner: zerofs.csi.sorend.github.com
 parameters:
   storageUrl: "s3://zerofs-data"
   awsSecretName: "zerofs-aws-credentials"
-  awsEndpoint: "http://minio.zerofs-csi.svc.cluster.local:9000"
+  awsEndpoint: "http://rustfs.zerofs-csi.svc.cluster.local:9000"
   awsAllowHTTP: "true"
   protocol: "ninep"
 reclaimPolicy: Delete
