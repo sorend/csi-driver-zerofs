@@ -1,27 +1,63 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits"
   ],
   "labels": [
     "dependencies"
   ],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "recreateClosed": true,
+  "rebaseWhen": "behind-base-branch",
+  "rangeStrategy": "bump",
   "packageRules": [
     {
+      "description": "Automerge patch, digest and lock-file-only updates",
       "matchUpdateTypes": [
         "digest",
         "patch",
-        "pin"
+        "pin",
+        "lockFileMaintenance"
       ],
       "automerge": true,
-      "automergeType": "pr"
+      "automergeType": "pr",
+      "groupName": null
     },
     {
-      "matchUpdateTypes": [
-        "major",
-        "minor"
+      "description": "Group the Kubernetes libraries so they stay on a compatible minor",
+      "matchPackagePatterns": [
+        "^k8s\\.io/"
       ],
-      "enabled": false
+      "groupName": "kubernetes libraries"
+    },
+    {
+      "description": "Keep the GitHub Actions toolchain in sync",
+      "matchPackagePatterns": [
+        "^actions/",
+        "^docker/",
+        "^goreleaser/",
+        "^helm/",
+        "^kubernetes-sigs/",
+        "^renovatebot/"
+      ],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Bump the Go version in CI and Dockerfiles together with go.mod",
+      "matchManagers": [
+        "gomod",
+        "dockerfile",
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "golang",
+        "go",
+        "actions/setup-go"
+      ],
+      "groupName": "go toolchain"
     }
   ]
 }

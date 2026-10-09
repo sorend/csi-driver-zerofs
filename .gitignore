@@ -6,4 +6,5 @@ bin/
 coverage.html
 .idea/
 .vscode/
+.goreleaser-extra/
 /.agent-shell/
