@@ -63,15 +63,15 @@ func (m *Manager) SetClient(client kubernetes.Interface) {
 }
 
 func (m *Manager) GetServiceName(volumeID string) string {
-	return fmt.Sprintf("zerofs-%s", volumeID)
+	return fmt.Sprintf("zerofs-%s", k8sName(volumeID, maxK8sNameLen-len("zerofs-")))
 }
 
 func (m *Manager) GetDeploymentName(volumeID string) string {
-	return fmt.Sprintf("zerofs-%s", volumeID)
+	return fmt.Sprintf("zerofs-%s", k8sName(volumeID, maxK8sNameLen-len("zerofs-")))
 }
 
 func (m *Manager) GetSecretName(volumeID string) string {
-	return fmt.Sprintf("zerofs-config-%s", volumeID)
+	return fmt.Sprintf("zerofs-config-%s", k8sName(volumeID, maxK8sNameLen-len("zerofs-config-")))
 }
 
 func (m *Manager) CreateZerofsDeployment(ctx context.Context, volumeID, storageURL string, protocol Protocol, nodeName string, params, secrets map[string]string, size int64) (string, string, error) {
@@ -92,7 +92,7 @@ func (m *Manager) CreateZerofsDeployment(ctx context.Context, volumeID, storageU
 			Labels: map[string]string{
 				AppLabel:       "zerofs-server",
 				ComponentLabel: "server",
-				VolumeLabel:    volumeID,
+				VolumeLabel:    k8sName(volumeID, maxK8sNameLen-len("zerofs-")),
 				ProtocolLabel:  string(protocol),
 			},
 		},
@@ -101,6 +101,9 @@ func (m *Manager) CreateZerofsDeployment(ctx context.Context, volumeID, storageU
 		},
 	}
 	metadataAnnotations := m.buildVolumeAnnotations(storageURL, protocol, nodeName, size, params)
+	// Object names and labels carry a sanitized form of the volume ID; keep the
+	// original so ListVolumes can report it back unchanged.
+	metadataAnnotations[AnnotationVolumeID] = volumeID
 	m.mergeMetadata(&secret.ObjectMeta, secret.Labels, metadataAnnotations)
 
 	if err := m.upsertSecret(ctx, secret); err != nil {
@@ -179,7 +182,7 @@ func (m *Manager) waitForPodIP(ctx context.Context, volumeID string) (string, er
 	labels := fmt.Sprintf("%s=%s,%s=%s,%s=%s",
 		AppLabel, "zerofs-server",
 		ComponentLabel, "server",
-		VolumeLabel, volumeID)
+		VolumeLabel, k8sName(volumeID, maxK8sNameLen-len("zerofs-")))
 
 	var podIP string
 	err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
@@ -284,7 +287,7 @@ func (m *Manager) waitForPodsGone(ctx context.Context, volumeID string, timeout 
 	labels := fmt.Sprintf("%s=%s,%s=%s,%s=%s",
 		AppLabel, "zerofs-server",
 		ComponentLabel, "server",
-		VolumeLabel, volumeID)
+		VolumeLabel, k8sName(volumeID, maxK8sNameLen-len("zerofs-")))
 
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -482,7 +485,7 @@ func (m *Manager) buildDeployment(name, volumeID, secretName string, protocol Pr
 	labels := map[string]string{
 		AppLabel:       "zerofs-server",
 		ComponentLabel: "server",
-		VolumeLabel:    volumeID,
+		VolumeLabel:    k8sName(volumeID, maxK8sNameLen-len("zerofs-")),
 		ProtocolLabel:  string(protocol),
 	}
 
@@ -609,7 +612,7 @@ func (m *Manager) buildService(name, volumeID string, protocol Protocol) *corev1
 	labels := map[string]string{
 		AppLabel:       "zerofs-server",
 		ComponentLabel: "server",
-		VolumeLabel:    volumeID,
+		VolumeLabel:    k8sName(volumeID, maxK8sNameLen-len("zerofs-")),
 		ProtocolLabel:  string(protocol),
 	}
 

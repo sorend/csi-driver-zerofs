@@ -10,9 +10,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 )
 
 const (
+	// AnnotationVolumeID holds the unmodified CSI volume ID.  Object names and
+	// the VolumeLabel can only carry a sanitized, length limited form of it.
+	AnnotationVolumeID              = "zerofs.csi.sorend.github.com/volume-id"
 	AnnotationStorageURL            = "zerofs.csi.sorend.github.com/storage-url"
 	AnnotationCapacity              = "zerofs.csi.sorend.github.com/capacity-bytes"
 	AnnotationNodeName              = "zerofs.csi.sorend.github.com/node-name"
@@ -148,7 +152,14 @@ func (m *Manager) ListVolumeMetadata(ctx context.Context) ([]VolumeMetadata, err
 
 	records := make([]VolumeMetadata, 0, len(deployments.Items))
 	for _, deployment := range deployments.Items {
-		volumeID := deployment.Labels[VolumeLabel]
+		// Prefer the annotation: the label can only hold a sanitized form of the
+		// volume ID.  Deployments created before the annotation existed fall back
+		// to the label, which then holds the volume ID verbatim.
+		volumeID := deployment.Annotations[AnnotationVolumeID]
+		if volumeID == "" {
+			volumeID = deployment.Labels[VolumeLabel]
+		}
+
 		record := volumeMetadataFromDeployment(&deployment)
 		record.VolumeID = volumeID
 		record.ServerName = fmt.Sprintf("%s.%s.svc.cluster.local", m.GetServiceName(volumeID), m.namespace)
@@ -173,18 +184,23 @@ func (m *Manager) UpdateVolumeCapacity(ctx context.Context, volumeID string, siz
 	}
 
 	deploymentName := m.GetDeploymentName(volumeID)
-	deployment, err := m.k8sClient.AppsV1().Deployments(m.namespace).Get(ctx, deploymentName, metav1.GetOptions{})
-	if err != nil {
+
+	// The Deployment controller updates the object concurrently, so re-read and
+	// retry instead of failing on a stale resourceVersion.
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		deployment, err := m.k8sClient.AppsV1().Deployments(m.namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		if deployment.Annotations == nil {
+			deployment.Annotations = map[string]string{}
+		}
+		deployment.Annotations[AnnotationCapacity] = strconv.FormatInt(size, 10)
+
+		_, err = m.k8sClient.AppsV1().Deployments(m.namespace).Update(ctx, deployment, metav1.UpdateOptions{})
 		return err
-	}
-
-	if deployment.Annotations == nil {
-		deployment.Annotations = map[string]string{}
-	}
-	deployment.Annotations[AnnotationCapacity] = strconv.FormatInt(size, 10)
-
-	_, err = m.k8sClient.AppsV1().Deployments(m.namespace).Update(ctx, deployment, metav1.UpdateOptions{})
-	return err
+	})
 }
 
 func (m *Manager) upsertSecret(ctx context.Context, secret *corev1.Secret) error {
