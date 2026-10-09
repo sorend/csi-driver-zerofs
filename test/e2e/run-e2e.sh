@@ -56,6 +56,11 @@ JUNIT_REPORT="${WORK_DIR}/junit_e2e.xml"
 
 E2E_ARGS="${E2E_ARGS:-}"
 
+# ginkgo's default suite timeout is 1h, which a full run exceeds: the suite
+# provisions a ZeroFS deployment, service and S3 prefix per volume and waits
+# for PV deletion after every spec. The CI job budget is 120 minutes.
+E2E_TIMEOUT="${E2E_TIMEOUT:-105m}"
+
 # The driver name has to be escaped for the ginkgo regex, so it is matched
 # literally here rather than relying on the dots in the FQDN.
 E2E_FOCUS="${E2E_FOCUS:-External Storage \[Driver: zerofs\.csi\.sorend\.github\.com\]}"
@@ -183,6 +188,7 @@ set +e
 "$E2E_TEST_BIN" \
     -ginkgo.v \
     -ginkgo.no-color \
+    -ginkgo.timeout "$E2E_TIMEOUT" \
     -ginkgo.junit-report "$JUNIT_REPORT" \
     -ginkgo.focus "$E2E_FOCUS" \
     -ginkgo.skip "$E2E_SKIP" \

@@ -56,11 +56,26 @@ The default `-ginkgo.skip` drops two classes of spec:
 
 Capabilities that are not claimed in `driverinfo.yaml` also cause their suites
 to skip: block volumes, topology, volume limits, snapshots, single-node volumes,
-ReadWriteOncePod and volume expansion. The last one is worth calling out:
-`ControllerExpandVolume` is implemented and the `zerofs` StorageClass sets
-`allowVolumeExpansion: true`, but the controller Deployment has no
-`external-resizer` sidecar, so nothing ever calls it. The capability stays off
-in the driver definition until the resizer is deployed.
+ReadWriteOncePod, fsGroup and volume expansion. The last two are worth calling
+out:
+
+* **fsGroup** - `CSIDriver` sets `fsGroupPolicy: File`, so kubelet should apply
+  the pod's fsGroup to the volume root. It does not take effect: in CI, files
+  created in that root come out `root:root` instead of inheriting the fsGroup,
+  and `fsgroupchangepolicy` fails. The cause has not been pinned down yet. It
+  reproduces on the CI runners; diagnosing it locally needs a host kernel with
+  NFS support, which is why the capability is simply not claimed for now.
+* **Volume expansion** - `ControllerExpandVolume` is implemented and the
+  `zerofs` StorageClass sets `allowVolumeExpansion: true`, but the controller
+  Deployment has no `external-resizer` sidecar, so nothing ever calls it. Not
+  claimed until the resizer is deployed.
+
+## Runtime
+
+A full run provisions a ZeroFS Deployment, Service and S3 prefix per volume and
+waits for PV deletion after every spec, so it does not fit inside ginkgo's
+default 1h suite timeout. `E2E_TIMEOUT` raises it to 105m, which lines up with
+the 120 minute CI job budget.
 
 ## Requirements
 
@@ -87,6 +102,7 @@ loadable modules do not. This is the same constraint documented in
 | `E2E_FOCUS` | replaces the default ginkgo focus |
 | `E2E_SKIP` | replaces the default `--ginkgo.skip` pattern |
 | `E2E_ARGS` | extra flags handed to `e2e.test` |
+| `E2E_TIMEOUT` | ginkgo suite timeout (default `105m`; ginkgo's own default is 1h, which a full run exceeds) |
 | `DRIVER_IMAGE` | driver image tag to build and load |
 | `ZEROFS_IMAGE` | ZeroFS server image |
 | `BUCKET` | S3 bucket backing the volumes |

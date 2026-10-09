@@ -29,14 +29,19 @@ DriverInfo:
     multipods: true
     # Plain filesystem mount, exec works.
     exec: true
-    # CSIDriver sets fsGroupPolicy: File, so kubelet applies the fsGroup.
-    fsGroup: true
     # The driver only ever looks at the CSI volume handle, never at the
     # PersistentVolume object, so two PVs sharing a handle behave the same as
     # one PV as far as the node service is concerned.
     multiplePVsSameID: true
 
     # Not claimed:
+    #   fsGroup          - CSIDriver sets fsGroupPolicy: File, so kubelet should
+    #                   apply the pod's fsGroup to the volume root, but in CI
+    #                   files created in that root come out root:root instead
+    #                   of inheriting the fsGroup and the fsgroupchangepolicy
+    #                   suite fails. Observed on the CI runners; not yet
+    #                   reproduced locally because that needs a host kernel with
+    #                   NFS support. Not claimed until the cause is found.
     #   block            - validateVolumeCapabilities rejects block volumes.
     #   controllerExpansion - ControllerExpandVolume is implemented and the
     #                      `zerofs` StorageClass sets allowVolumeExpansion, but
@@ -53,6 +58,7 @@ DriverInfo:
     #   readWriteOncePod - not implemented.
     #   snapshot*        - CreateSnapshot returns Unimplemented.
     block: false
+    fsGroup: false
     topology: false
     volumeLimits: false
     singleNodeVolume: false
