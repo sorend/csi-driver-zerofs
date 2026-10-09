@@ -1,0 +1,63 @@
+---
+# Standalone plugin pod used by csi-sanity.
+#
+# The regular controller Deployment and node DaemonSet each expose their own
+# unix socket, which csi-sanity cannot reach from outside the cluster.  This pod
+# serves the identity, controller and node services on a single TCP endpoint
+# published on the node via hostPort, so the csi-sanity binary running on the
+# host can drive the whole driver.
+#
+# It reuses the zerofs-csi-controller ServiceAccount because the controller
+# service needs to create the per-volume ZeroFS deployments, services and
+# secrets.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: zerofs-csi-sanity
+  namespace: zerofs-csi
+  labels:
+    app.kubernetes.io/name: csi-driver-zerofs
+    app.kubernetes.io/component: sanity
+spec:
+  serviceAccountName: zerofs-csi-controller
+  # Listens directly on the node network so csi-sanity on the host can reach the
+  # endpoint without a hostPort/NodePort (which needs iptables DNAT support).
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+  containers:
+    - name: zerofs-plugin
+      image: ghcr.io/sorend/csi-driver-zerofs:latest
+      imagePullPolicy: IfNotPresent
+      args:
+        - sanity
+        - "--endpoint=$(CSI_ENDPOINT)"
+        - "--node-id=$(KUBE_NODE_NAME)"
+        - "--namespace=zerofs-csi"
+        - "--zerofs-image=ghcr.io/barre/zerofs:1.0.4"
+      securityContext:
+        # Needs to mount NFS/9P volumes, same as the node plugin.
+        privileged: true
+      env:
+        - name: CSI_ENDPOINT
+          value: tcp://0.0.0.0:10000
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+      ports:
+        - name: csi
+          containerPort: 10000
+          protocol: TCP
+      readinessProbe:
+        tcpSocket:
+          port: 10000
+        initialDelaySeconds: 2
+        periodSeconds: 2
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi

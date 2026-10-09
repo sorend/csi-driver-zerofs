@@ -1,0 +1,8 @@
+# CreateVolume parameters passed to csi-sanity via --csi.testvolumeparameters.
+# These mirror the parameters of the `zerofs` StorageClass in
+# deploy/storageclasses.yaml and point at the RustFS backend deployed by
+# test/rustfs.yaml.
+storageUrl: "s3://zerofs-data"
+awsSecretName: "zerofs-aws-credentials"
+awsEndpoint: "http://rustfs.zerofs-csi.svc.cluster.local:9000"
+awsAllowHTTP: "true"
