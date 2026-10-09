@@ -87,11 +87,17 @@ Credentials must come from a Secret (raw keys in parameters are ignored).
 ```bash
 make test         # unit tests
 make sanity-test  # csi-sanity suite against the driver in a kind cluster
+make e2e-test     # Kubernetes external storage e2e suite in a kind cluster
 ```
 
 `make sanity-test` creates a throwaway kind cluster, deploys the driver with a
 RustFS backend and runs the [csi-sanity](https://github.com/kubernetes-csi/csi-test)
 suite against it. See [test/sanity/README.md](test/sanity/README.md) for details.
+
+`make e2e-test` runs the upstream Kubernetes external storage e2e suite
+(`test/e2e/storage/external`) against the driver. It needs several nodes to
+exercise the multi-node tests, so it uses a dedicated three-worker kind
+config. See [test/e2e/README.md](test/e2e/README.md) for details.
 
 ## Uninstall
 
