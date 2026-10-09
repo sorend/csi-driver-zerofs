@@ -1,4 +1,4 @@
-.PHONY: all build test clean docker-build docker-push install lint fmt vet release release-snapshot release-check render-manifests
+.PHONY: all build test clean docker-build docker-push install lint fmt vet release release-snapshot release-check render-manifests csi-sanity-install sanity-test
 
 REGISTRY ?= ghcr.io/sorend
 IMAGE_NAME ?= csi-driver-zerofs
@@ -11,6 +11,8 @@ GOOS ?= linux
 GOARCH ?= $(shell go env GOARCH)
 GORELEASER ?= goreleaser
 GORELEASER_IMAGE ?= goreleaser/goreleaser:latest
+CSI_SANITY_VERSION ?= v5.6.0
+CSI_SANITY_BIN ?= $(shell go env GOPATH)/bin/csi-sanity
 GORELEASER_RUN = sh -ec 'if command -v "$(GORELEASER)" >/dev/null 2>&1; then exec "$(GORELEASER)" "$$@"; fi; exec docker run --rm -v "$(CURDIR):/workspace" -w /workspace -e GITHUB_REPOSITORY="$$GITHUB_REPOSITORY" -e GITHUB_TOKEN "$(GORELEASER_IMAGE)" "$$@"' --
 
 all: build
@@ -31,6 +33,15 @@ test:
 
 test-coverage: test
 	go tool cover -html=coverage.out -o coverage.html
+
+# csi-sanity comes from the kubernetes-csi/csi-test module; there is no
+# released container image, so install the binary from source.
+csi-sanity-install:
+	go install github.com/kubernetes-csi/csi-test/v5/cmd/csi-sanity@$(CSI_SANITY_VERSION)
+
+# Runs the CSI sanity suite against the driver inside a throwaway kind cluster.
+sanity-test: csi-sanity-install
+	CSI_SANITY_BIN="$(CSI_SANITY_BIN)" ./test/sanity/run-sanity.sh
 
 lint:
 	golangci-lint run ./...
@@ -81,6 +92,8 @@ help:
 	@echo "  build-all         - Build binaries for linux/amd64 and linux/arm64"
 	@echo "  test              - Run unit tests"
 	@echo "  test-coverage     - Run tests with coverage report"
+	@echo "  csi-sanity-install - Install the csi-sanity binary ($(CSI_SANITY_VERSION))"
+	@echo "  sanity-test       - Run csi-sanity against the driver in a kind cluster"
 	@echo "  lint              - Run golangci-lint"
 	@echo "  fmt               - Format Go code"
 	@echo "  vet               - Run go vet"

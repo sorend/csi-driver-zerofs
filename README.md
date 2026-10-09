@@ -82,6 +82,17 @@ Or use `zerofs-ninep` for 9P (ReadWriteOnce).
 
 Credentials must come from a Secret (raw keys in parameters are ignored).
 
+## Testing
+
+```bash
+make test         # unit tests
+make sanity-test  # csi-sanity suite against the driver in a kind cluster
+```
+
+`make sanity-test` creates a throwaway kind cluster, deploys the driver with a
+RustFS backend and runs the [csi-sanity](https://github.com/kubernetes-csi/csi-test)
+suite against it. See [test/sanity/README.md](test/sanity/README.md) for details.
+
 ## Uninstall
 
 ```bash

@@ -33,6 +33,47 @@ jobs:
       - name: Build Docker image
         run: make docker-build
 
+  sanity-test:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run csi-sanity
+        env:
+          KIND_CLUSTER: zerofs-sanity
+          DRIVER_IMAGE: ghcr.io/${{ github.repository }}:latest
+          KEEP_CLUSTER: 1
+        run: |
+          make csi-sanity-install
+          ./test/sanity/run-sanity.sh
+
+      - name: Dump csi-sanity logs on failure
+        if: failure()
+        run: |
+          kubectl logs -n zerofs-csi zerofs-csi-sanity -c zerofs-plugin --tail=200 || true
+          kubectl logs -n zerofs-csi deployment/zerofs-csi-controller -c zerofs-plugin --tail=100 || true
+
+      - name: Upload csi-sanity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-sanity
+          path: /tmp/csi-sanity/junit_sanity.xml
+          if-no-files-found: ignore
+
+      - name: Delete kind cluster
+        if: always()
+        run: kind delete cluster --name zerofs-sanity
+
   integration-test:
     runs-on: ubuntu-latest
     needs: build

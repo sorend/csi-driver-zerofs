@@ -30,6 +30,7 @@ func init() {
 	rootCmd.AddCommand(controllerCmd)
 	rootCmd.AddCommand(nodeCmd)
 	rootCmd.AddCommand(serverCmd)
+	rootCmd.AddCommand(sanityCmd)
 
 	controllerCmd.Flags().StringVar(&driverName, "driver-name", driver.DriverName, "name of the CSI driver")
 	controllerCmd.Flags().StringVar(&endpoint, "endpoint", "unix:///csi/csi.sock", "CSI endpoint")
@@ -44,6 +45,14 @@ func init() {
 
 	serverCmd.Flags().StringVar(&namespace, "namespace", "default", "namespace")
 	serverCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file")
+
+	sanityCmd.Flags().StringVar(&driverName, "driver-name", driver.DriverName, "name of the CSI driver")
+	sanityCmd.Flags().StringVar(&nodeID, "node-id", "", "node ID")
+	sanityCmd.Flags().StringVar(&endpoint, "endpoint", "tcp://0.0.0.0:10000", "CSI endpoint")
+	sanityCmd.Flags().StringVar(&namespace, "namespace", "default", "namespace to run in")
+	sanityCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file")
+	sanityCmd.Flags().StringVar(&workDir, "work-dir", "/var/lib/zerofs-csi", "working directory")
+	sanityCmd.Flags().StringVar(&zerofsImage, "zerofs-image", "ghcr.io/barre/zerofs:1.0.4", "ZeroFS server container image")
 }
 
 var rootCmd = &cobra.Command{
@@ -112,6 +121,60 @@ var nodeCmd = &cobra.Command{
 			NodeID:     nodeID,
 			Endpoint:   endpoint,
 		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		go func() {
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			<-sigCh
+			klog.Info("Received termination signal, shutting down...")
+			cancel()
+		}()
+
+		go func() {
+			<-ctx.Done()
+			drv.Stop()
+		}()
+
+		return drv.Run()
+	},
+}
+
+// sanityCmd serves the identity, controller and node services on a single
+// endpoint.  It exists so csi-sanity can drive the whole driver from one
+// socket when running the test suite inside a cluster.
+var sanityCmd = &cobra.Command{
+	Use:   "sanity",
+	Short: "Run the CSI identity, controller and node services on a single endpoint (for csi-sanity)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		klog.Infof("Starting ZeroFS CSI sanity service (driver: %s, node: %s)", driverName, nodeID)
+
+		config, err := getKubeConfig()
+		if err != nil {
+			return fmt.Errorf("failed to get kubernetes config: %w", err)
+		}
+
+		k8sClient, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			return fmt.Errorf("failed to create kubernetes client: %w", err)
+		}
+
+		drv := driver.NewDriver(&driver.DriverOptions{
+			DriverName:  driverName,
+			NodeID:      nodeID,
+			Endpoint:    endpoint,
+			Namespace:   namespace,
+			Kubeconfig:  kubeconfig,
+			WorkDir:     workDir,
+			ZerofsImage: zerofsImage,
+		})
+
+		manager := drv.GetManager()
+		if manager != nil {
+			manager.SetClient(k8sClient)
+		}
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

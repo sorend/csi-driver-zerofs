@@ -53,18 +53,25 @@ func NewDriver(options *DriverOptions) *Driver {
 }
 
 func (d *Driver) Run() error {
-	scheme := "unix"
-	addr := d.options.Endpoint
-	if strings.HasPrefix(addr, "unix://") {
-		scheme = "unix"
-		addr = strings.TrimPrefix(addr, "unix://")
-	}
+	scheme, addr := parseEndpoint(d.options.Endpoint)
 
 	d.server = NewNonBlockingGRPCServer(scheme, addr)
 	d.server.Start(d.ids, d.Cs, d.ns)
 	d.server.Wait()
 
 	return nil
+}
+
+// parseEndpoint splits a CSI endpoint into a net.Listen network and address.
+// Both "unix:///csi/csi.sock" and "tcp://0.0.0.0:10000" forms are accepted;
+// endpoints without a known scheme default to a unix socket.
+func parseEndpoint(endpoint string) (string, string) {
+	for _, scheme := range []string{"unix", "tcp"} {
+		if strings.HasPrefix(endpoint, scheme+"://") {
+			return scheme, strings.TrimPrefix(endpoint, scheme+"://")
+		}
+	}
+	return "unix", endpoint
 }
 
 func (d *Driver) Stop() {
