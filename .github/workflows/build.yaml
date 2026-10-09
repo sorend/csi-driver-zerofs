@@ -95,28 +95,27 @@ jobs:
           kubectl rollout status daemonset/zerofs-csi-node \
             -n zerofs-csi --timeout=120s
 
-      - name: Deploy MinIO
+      - name: Deploy RustFS
         run: |
-          kubectl apply -f test/minio.yaml
-          kubectl rollout status deployment/minio \
+          kubectl apply -f test/rustfs.yaml
+          kubectl rollout status deployment/rustfs \
             -n zerofs-csi --timeout=120s
 
-      - name: Create MinIO bucket
+      - name: Create S3 bucket
         run: |
-          kubectl run minio-init \
-            --image=quay.io/minio/mc:latest \
+          kubectl run s3-init \
+            --image=amazon/aws-cli:latest \
             --restart=Never \
             -n zerofs-csi \
+            --env=AWS_ACCESS_KEY_ID=minioadmin \
+            --env=AWS_SECRET_ACCESS_KEY=minioadmin123 \
+            --env=AWS_DEFAULT_REGION=us-east-1 \
             --command -- /bin/sh -c \
-            "mc alias set local http://minio.zerofs-csi.svc.cluster.local:9000 minioadmin minioadmin123 && mc mb --ignore-existing local/zerofs-data"
-          kubectl wait pod/minio-init \
-            -n zerofs-csi \
-            --for=condition=ready \
-            --timeout=120s || true
-          kubectl wait pod/minio-init \
+            "aws --endpoint-url http://rustfs.zerofs-csi.svc.cluster.local:9000 s3api head-bucket --bucket zerofs-data >/dev/null 2>&1 || aws --endpoint-url http://rustfs.zerofs-csi.svc.cluster.local:9000 s3 mb s3://zerofs-data"
+          kubectl wait pod/s3-init \
             -n zerofs-csi \
             --for=jsonpath='{.status.phase}'=Succeeded \
-            --timeout=60s
+            --timeout=120s
 
       - name: Run integration tests
         run: |

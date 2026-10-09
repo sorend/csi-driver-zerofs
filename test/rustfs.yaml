@@ -1,37 +1,35 @@
 ---
-# MinIO deployment for integration testing
+# RustFS deployment for integration testing
+# S3-compatible object storage backend used in place of MinIO.
 # Deploy to zerofs-csi namespace alongside the CSI driver
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: minio
+  name: rustfs
   namespace: zerofs-csi
   labels:
-    app: minio
-    app.kubernetes.io/name: minio
+    app: rustfs
+    app.kubernetes.io/name: rustfs
     app.kubernetes.io/component: s3-backend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: minio
+      app: rustfs
   template:
     metadata:
       labels:
-        app: minio
+        app: rustfs
     spec:
       containers:
-        - name: minio
-          image: quay.io/minio/minio:latest
+        - name: rustfs
+          image: rustfs/rustfs:1.0.1
           args:
-            - server
             - /data
-            - --console-address
-            - ":9001"
           env:
-            - name: MINIO_ROOT_USER
+            - name: RUSTFS_ACCESS_KEY
               value: minioadmin
-            - name: MINIO_ROOT_PASSWORD
+            - name: RUSTFS_SECRET_KEY
               value: minioadmin123
           ports:
             - name: api
@@ -40,7 +38,7 @@ spec:
               containerPort: 9001
           readinessProbe:
             httpGet:
-              path: /minio/health/ready
+              path: /health/ready
               port: 9000
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -48,15 +46,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: minio
+  name: rustfs
   namespace: zerofs-csi
   labels:
-    app: minio
-    app.kubernetes.io/name: minio
+    app: rustfs
+    app.kubernetes.io/name: rustfs
     app.kubernetes.io/component: s3-backend
 spec:
   selector:
-    app: minio
+    app: rustfs
   ports:
     - name: api
       port: 9000

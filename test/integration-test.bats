@@ -4,8 +4,8 @@
 #
 # Prerequisites:
 #   - kind cluster "zerofs-integration" running with zerofs-csi-driver deployed
-#   - MinIO deployed in the zerofs-csi namespace
-#   - zerofs-data bucket created in MinIO
+#   - RustFS deployed in the zerofs-csi namespace
+#   - zerofs-data bucket created in RustFS
 #
 # Setup (run once before tests):
 #   kind create cluster --name zerofs-integration --config test/kind-config.yaml
@@ -18,12 +18,14 @@
 #     --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/2/imagePullPolicy","value":"Never"}]'
 #   kubectl --context kind-zerofs-integration patch daemonset zerofs-csi-node -n zerofs-csi \
 #     --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/2/imagePullPolicy","value":"Never"}]'
-#   # Deploy MinIO
-#   kubectl --context kind-zerofs-integration apply -f test/minio.yaml
+#   # Deploy RustFS
+#   kubectl --context kind-zerofs-integration apply -f test/rustfs.yaml
 #   # Create bucket
-#   kubectl --context kind-zerofs-integration run minio-init \
-#     --image=quay.io/minio/mc:latest --restart=Never -n zerofs-csi \
-#     --command -- /bin/sh -c "mc alias set local http://minio.zerofs-csi.svc.cluster.local:9000 minioadmin minioadmin123 && mc mb --ignore-existing local/zerofs-data"
+#   kubectl --context kind-zerofs-integration run s3-init \
+#     --image=amazon/aws-cli:latest --restart=Never -n zerofs-csi \
+#     --env=AWS_ACCESS_KEY_ID=minioadmin --env=AWS_SECRET_ACCESS_KEY=minioadmin123 \
+#     --env=AWS_DEFAULT_REGION=us-east-1 \
+#     --command -- /bin/sh -c "aws --endpoint-url http://rustfs.zerofs-csi.svc.cluster.local:9000 s3 mb s3://zerofs-data"
 #
 # Teardown (run once after all tests):
 #   kind delete cluster --name zerofs-integration
@@ -148,8 +150,8 @@ dump_debug() {
     [ "$output" = "zerofs.csi.sorend.github.com" ]
 }
 
-@test "MinIO is running and accessible" {
-    run ${KUBECTL} get deployment minio -n zerofs-csi -o jsonpath='{.status.availableReplicas}'
+@test "RustFS is running and accessible" {
+    run ${KUBECTL} get deployment rustfs -n zerofs-csi -o jsonpath='{.status.availableReplicas}'
     [ "$status" -eq 0 ]
     [ "$output" = "1" ]
 }
@@ -197,9 +199,9 @@ EOF
     # Fallback: list all deployments and check for one that's not the CSI controller
     run ${KUBECTL} get deployments -n zerofs-csi --no-headers
     [ "$status" -eq 0 ]
-    # Should have at least: zerofs-csi-controller + minio + the volume deployment
+    # Should have at least: zerofs-csi-controller + rustfs + the volume deployment
     local count
-    count=$(echo "$output" | grep -v "zerofs-csi-controller\|minio" | grep -c "zerofs-" || true)
+    count=$(echo "$output" | grep -v "zerofs-csi-controller\|rustfs" | grep -c "zerofs-" || true)
     [ "$count" -ge 1 ]
 }
 
@@ -304,7 +306,7 @@ EOF
     while [ $elapsed -lt $timeout ]; do
         local count
         count=$(${KUBECTL} get deployments -n zerofs-csi --no-headers 2>/dev/null | \
-            grep -v "zerofs-csi-controller\|minio" | grep -c "zerofs-" || true)
+            grep -v "zerofs-csi-controller\|rustfs" | grep -c "zerofs-" || true)
         if [ "$count" -eq 0 ]; then
             break
         fi
@@ -314,7 +316,7 @@ EOF
 
     local remaining
     remaining=$(${KUBECTL} get deployments -n zerofs-csi --no-headers 2>/dev/null | \
-        grep -v "zerofs-csi-controller\|minio" | grep "zerofs-" || true)
+        grep -v "zerofs-csi-controller\|rustfs" | grep "zerofs-" || true)
     [ -z "$remaining" ]
 }
 
@@ -427,7 +429,7 @@ EOF
     while [ $elapsed -lt $timeout ]; do
         local count
         count=$(${KUBECTL} get deployments -n zerofs-csi --no-headers 2>/dev/null | \
-            grep -v "zerofs-csi-controller\|minio" | grep -c "zerofs-" || true)
+            grep -v "zerofs-csi-controller\|rustfs" | grep -c "zerofs-" || true)
         if [ "$count" -eq 0 ]; then
             break
         fi
@@ -437,6 +439,6 @@ EOF
 
     local remaining
     remaining=$(${KUBECTL} get deployments -n zerofs-csi --no-headers 2>/dev/null | \
-        grep -v "zerofs-csi-controller\|minio" | grep "zerofs-" || true)
+        grep -v "zerofs-csi-controller\|rustfs" | grep "zerofs-" || true)
     [ -z "$remaining" ]
 }

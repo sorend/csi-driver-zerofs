@@ -38,7 +38,7 @@ metadata:
   annotations:
     zerofs.csi.sorend.github.com/storage-url: "s3://per-pvc-bucket/zerofs-data"
     zerofs.csi.sorend.github.com/aws-secret-name: "zerofs-aws-credentials"
-    zerofs.csi.sorend.github.com/aws-endpoint: "http://minio.zerofs-csi.svc.cluster.local:9000"
+    zerofs.csi.sorend.github.com/aws-endpoint: "http://rustfs.zerofs-csi.svc.cluster.local:9000"
     zerofs.csi.sorend.github.com/aws-allow-http: "true"
 spec:
   accessModes:
@@ -55,7 +55,7 @@ metadata:
   annotations:
     zerofs.csi.sorend.github.com/storage-url: "s3://another-bucket/zerofs-data"
     zerofs.csi.sorend.github.com/aws-secret-name: "zerofs-aws-credentials"
-    zerofs.csi.sorend.github.com/aws-endpoint: "http://minio.zerofs-csi.svc.cluster.local:9000"
+    zerofs.csi.sorend.github.com/aws-endpoint: "http://rustfs.zerofs-csi.svc.cluster.local:9000"
     zerofs.csi.sorend.github.com/aws-allow-http: "true"
 spec:
   accessModes:

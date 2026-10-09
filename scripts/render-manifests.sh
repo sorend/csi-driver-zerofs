@@ -27,4 +27,4 @@ sed "s|__CSI_DRIVER_IMAGE__|$CSI_DRIVER_IMAGE|g" \
 
 cp "$ROOT_DIR/deploy/storageclasses.yaml" "$ABS_OUTPUT_DIR/storageclasses.yaml"
 cp "$ROOT_DIR/deploy/examples.yaml" "$ABS_OUTPUT_DIR/examples.yaml"
-cp "$ROOT_DIR/test/minio.yaml" "$ABS_OUTPUT_DIR/minio.yaml"
+cp "$ROOT_DIR/test/rustfs.yaml" "$ABS_OUTPUT_DIR/rustfs.yaml"
