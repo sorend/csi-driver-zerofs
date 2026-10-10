@@ -56,10 +56,12 @@ JUNIT_REPORT="${WORK_DIR}/junit_e2e.xml"
 
 E2E_ARGS="${E2E_ARGS:-}"
 
-# ginkgo's default suite timeout is 1h, which a full run exceeds: the suite
-# provisions a ZeroFS deployment, service and S3 prefix per volume and waits
-# for PV deletion after every spec. The CI job budget is 120 minutes.
-E2E_TIMEOUT="${E2E_TIMEOUT:-105m}"
+# ginkgo's default suite timeout is 1h, which a full run can exceed: the suite
+# provisions a ZeroFS deployment, service and S3 prefix per volume and waits for
+# PV deletion after every spec. A full run takes roughly 20-40 minutes depending
+# on the machine, so 60m leaves headroom while still failing well inside the
+# 120 minute CI job budget instead of running to it.
+E2E_TIMEOUT="${E2E_TIMEOUT:-60m}"
 
 # The driver name has to be escaped for the ginkgo regex, so it is matched
 # literally here rather than relying on the dots in the FQDN.

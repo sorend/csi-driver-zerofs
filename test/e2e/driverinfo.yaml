@@ -35,13 +35,19 @@ DriverInfo:
     multiplePVsSameID: true
 
     # Not claimed:
-    #   fsGroup          - CSIDriver sets fsGroupPolicy: File, so kubelet should
-    #                   apply the pod's fsGroup to the volume root, but in CI
-    #                   files created in that root come out root:root instead
-    #                   of inheriting the fsGroup and the fsgroupchangepolicy
-    #                   suite fails. Observed on the CI runners; not yet
-    #                   reproduced locally because that needs a host kernel with
-    #                   NFS support. Not claimed until the cause is found.
+    #   fsGroup          - CSIDriver sets fsGroupPolicy: File, so kubelet does the
+    #                   work itself: it chowns the volume root to root:<fsGroup>
+    #                   and sets the setgid bit. That part works, but the
+    #                   ZeroFS server does not implement setgid gid inheritance
+    #                   on file create, so a new file lands root:root instead of
+    #                   inheriting the directory's gid. Reproduced directly
+    #                   against a mounted export:
+    #                     chown root:1000 dir; chmod g+s dir   # dir becomes drwxr-sr-x root:1000
+    #                     touch dir/explicit && chown 0:1000 dir/explicit   # gid 1000, chown works
+    #                     touch dir/inherited                                # gid 0, should be 1000
+    #                   Upstream ZeroFS handles this for directories but not
+    #                   for files, so the capability stays off until it is fixed
+    #                   there. See barre/zerofs create.rs.
     #   block            - validateVolumeCapabilities rejects block volumes.
     #   controllerExpansion - ControllerExpandVolume is implemented and the
     #                      `zerofs` StorageClass sets allowVolumeExpansion, but

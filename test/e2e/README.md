@@ -59,12 +59,25 @@ to skip: block volumes, topology, volume limits, snapshots, single-node volumes,
 ReadWriteOncePod, fsGroup and volume expansion. The last two are worth calling
 out:
 
-* **fsGroup** - `CSIDriver` sets `fsGroupPolicy: File`, so kubelet should apply
-  the pod's fsGroup to the volume root. It does not take effect: in CI, files
-  created in that root come out `root:root` instead of inheriting the fsGroup,
-  and `fsgroupchangepolicy` fails. The cause has not been pinned down yet. It
-  reproduces on the CI runners; diagnosing it locally needs a host kernel with
-  NFS support, which is why the capability is simply not claimed for now.
+* **fsGroup** - `CSIDriver` sets `fsGroupPolicy: File`, so kubelet does the work
+  itself: it chowns the volume root to `root:<fsGroup>` and sets the setgid bit.
+  That part works. The failure is in the ZeroFS server, which does not implement
+  setgid gid inheritance when creating a *file*, so a new file lands `root:root`
+  instead of inheriting the directory's gid. Confirmed directly against a
+  mounted export:
+
+  ```console
+  # chown and setgid both work - the directory ends up drwxr-sr-x root:1000
+  chown root:1000 dir && chmod g+s dir && ls -land dir
+  # explicit chown works, so it is not a permission problem
+  touch dir/explicit && chown 0:1000 dir/explicit && ls -land dir/explicit
+  # inheritance is the broken part - should be gid 1000
+  touch dir/inherited && ls -land dir/inherited
+  ```
+
+  Upstream ZeroFS implements the inheritance for directories but not for files,
+  so this cannot be worked around from the driver. Not claimed until it is fixed
+  in ZeroFS.
 * **Volume expansion** - `ControllerExpandVolume` is implemented and the
   `zerofs` StorageClass sets `allowVolumeExpansion: true`, but the controller
   Deployment has no `external-resizer` sidecar, so nothing ever calls it. Not
@@ -73,9 +86,18 @@ out:
 ## Runtime
 
 A full run provisions a ZeroFS Deployment, Service and S3 prefix per volume and
-waits for PV deletion after every spec, so it does not fit inside ginkgo's
-default 1h suite timeout. `E2E_TIMEOUT` raises it to 105m, which lines up with
-the 120 minute CI job budget.
+waits for PV deletion after every spec, which lands somewhere between 20 and 40
+minutes depending on the machine. `E2E_TIMEOUT` raises ginkgo's suite timeout
+from its 1h default to 60m.
+
+That headroom matters. A failing spec can also burn 20 minutes in cleanup: the
+suite waits for the PV to be deleted while tearing the namespace down, and that
+wait is the suite's own 20m limit rather than something the driver controls. PV
+deletion itself is fast - a create/delete cycle against a running cluster takes
+about ten seconds - so several stuck specs will burn the whole budget and the
+run ends as a suite timeout rather than as the actual failures. When that
+happens, read the individual `[FAILED]` specs above the timeout line rather than
+the summary.
 
 ## Requirements
 
@@ -102,7 +124,7 @@ loadable modules do not. This is the same constraint documented in
 | `E2E_FOCUS` | replaces the default ginkgo focus |
 | `E2E_SKIP` | replaces the default `--ginkgo.skip` pattern |
 | `E2E_ARGS` | extra flags handed to `e2e.test` |
-| `E2E_TIMEOUT` | ginkgo suite timeout (default `105m`; ginkgo's own default is 1h, which a full run exceeds) |
+| `E2E_TIMEOUT` | ginkgo suite timeout (default `60m`; ginkgo's own default is 1h) |
 | `DRIVER_IMAGE` | driver image tag to build and load |
 | `ZEROFS_IMAGE` | ZeroFS server image |
 | `BUCKET` | S3 bucket backing the volumes |
