@@ -48,9 +48,11 @@ DriverInfo:
     #                   Fixed in a fork (sorend/ZeroFS, branch
     #                   fix/setgid-inheritance-on-create): all seven specs pass
     #                   in 199s against a patched build, versus 3 failures and
-    #                   ~20min each in cleanup against 1.0.4. Not claimed until
-    #                   it ships in a released ZeroFS image, since the default
-    #                   ZEROFS_IMAGE is still the unpatched 1.0.4.
+    #                   ~20min each in cleanup against a stock image. The fix is
+    #                   not in any upstream release as of ZeroFS 2.3.5
+    #                   (barre/ZeroFS#646 is open and unmerged), and create.rs is
+    #                   identical between main and v2.3.5, so it is not claimed
+    #                   against the default ZEROFS_IMAGE either.
     #                   See FINDINGS.md and upstream ZeroFS create.rs.
     #   block            - validateVolumeCapabilities rejects block volumes.
     #   controllerExpansion - ControllerExpandVolume is implemented and the

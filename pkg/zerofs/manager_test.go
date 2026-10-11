@@ -26,14 +26,14 @@ var _ = ginkgo.Describe("Manager", func() {
 	)
 
 	ginkgo.BeforeEach(func() {
-		manager = NewManager("default", "/var/lib/zerofs-csi", "ghcr.io/barre/zerofs:1.0.4")
+		manager = NewManager("default", "/var/lib/zerofs-csi", "ghcr.io/barre/zerofs:2.3.5")
 	})
 
 	ginkgo.Context("NewManager", func() {
 		ginkgo.It("should create a manager with correct settings", func() {
 			gomega.Expect(manager.namespace).To(gomega.Equal("default"))
 			gomega.Expect(manager.workDir).To(gomega.Equal("/var/lib/zerofs-csi"))
-			gomega.Expect(manager.zerofsImage).To(gomega.Equal("ghcr.io/barre/zerofs:1.0.4"))
+			gomega.Expect(manager.zerofsImage).To(gomega.Equal("ghcr.io/barre/zerofs:2.3.5"))
 		})
 	})
 
@@ -80,6 +80,16 @@ var _ = ginkgo.Describe("Manager", func() {
 			config, err := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, nil, secrets)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			gomega.Expect(config).To(gomega.ContainSubstring("my-secret-password"))
+		})
+
+		ginkgo.It("should default the cache dir under the mounted data path", func() {
+			// ZeroFS >= 2.0 creates per-bucket subdirectories under the cache
+			// dir at startup and exits if it cannot, so a cache dir outside the
+			// emptyDir mounted at DataPath crash-loops every server pod.
+			config, err := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, nil, nil)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(config).To(gomega.ContainSubstring(DefaultCacheDir))
+			gomega.Expect(DefaultCacheDir).To(gomega.HavePrefix(DataPath))
 		})
 
 		ginkgo.It("should use custom cache settings from params", func() {
@@ -228,7 +238,7 @@ var _ = ginkgo.Describe("Manager", func() {
 
 			container := deployment.Spec.Template.Spec.Containers[0]
 			gomega.Expect(container.Name).To(gomega.Equal("zerofs"))
-			gomega.Expect(container.Image).To(gomega.Equal("ghcr.io/barre/zerofs:1.0.4"))
+			gomega.Expect(container.Image).To(gomega.Equal("ghcr.io/barre/zerofs:2.3.5"))
 			gomega.Expect(container.Ports).To(gomega.HaveLen(1))
 		})
 

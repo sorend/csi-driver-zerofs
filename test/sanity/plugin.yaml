@@ -33,7 +33,7 @@ spec:
         - "--endpoint=$(CSI_ENDPOINT)"
         - "--node-id=$(KUBE_NODE_NAME)"
         - "--namespace=zerofs-csi"
-        - "--zerofs-image=ghcr.io/barre/zerofs:1.0.4"
+        - "--zerofs-image=ghcr.io/barre/zerofs:2.3.5"
       securityContext:
         # Needs to mount NFS/9P volumes, same as the node plugin.
         privileged: true

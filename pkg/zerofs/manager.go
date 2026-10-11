@@ -18,18 +18,22 @@ import (
 )
 
 const (
-	NFSPort        = 2049
-	NinepPort      = 5564
-	RPCPort        = 7000
-	HealthPort     = 8080
-	ConfigVolume   = "zerofs-config"
-	DataVolume     = "zerofs-data"
-	ConfigPath     = "/etc/zerofs"
-	DataPath       = "/data"
-	AppLabel       = "app.kubernetes.io/name"
-	ComponentLabel = "app.kubernetes.io/component"
-	VolumeLabel    = "zerofs.csi.sorend.github.com/volume-id"
-	ProtocolLabel  = "zerofs.csi.sorend.github.com/protocol"
+	NFSPort      = 2049
+	NinepPort    = 5564
+	RPCPort      = 7000
+	HealthPort   = 8080
+	ConfigVolume = "zerofs-config"
+	DataVolume   = "zerofs-data"
+	ConfigPath   = "/etc/zerofs"
+	DataPath     = "/data"
+	// DefaultCacheDir is the ZeroFS disk cache location. It sits under
+	// DataPath so it lands on the emptyDir the server pod mounts rather than
+	// the container's read-only-to-us overlay filesystem.
+	DefaultCacheDir = DataPath + "/cache"
+	AppLabel        = "app.kubernetes.io/name"
+	ComponentLabel  = "app.kubernetes.io/component"
+	VolumeLabel     = "zerofs.csi.sorend.github.com/volume-id"
+	ProtocolLabel   = "zerofs.csi.sorend.github.com/protocol"
 )
 
 type Protocol string
@@ -402,9 +406,15 @@ func (m *Manager) generateConfigWithContext(ctx context.Context, storageURL stri
 		encryptionPassword = "default-zerofs-encryption-key"
 	}
 
+	// The cache has to live under DataPath, which is the emptyDir the server
+	// pod mounts. ZeroFS >= 2.0 creates per-bucket subdirectories (and a foyer
+	// hybrid cache dir) under the cache dir at startup and fails hard if it
+	// cannot. A cache dir outside the mount lands on the container's
+	// root-owned overlay filesystem, where the non-root zerofs user cannot
+	// create anything, and every volume crash-loops on startup.
 	cacheDir := params["cacheDir"]
 	if cacheDir == "" {
-		cacheDir = "/var/lib/zerofs/cache"
+		cacheDir = DefaultCacheDir
 	}
 
 	cacheSizeGB := params["cacheSizeGB"]

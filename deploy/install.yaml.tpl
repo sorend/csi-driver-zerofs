@@ -216,7 +216,7 @@ spec:
             - controller
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--namespace=zerofs-csi"
-            - "--zerofs-image=ghcr.io/barre/zerofs:1.0.4"
+            - "--zerofs-image=ghcr.io/barre/zerofs:2.3.5"
           env:
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock

@@ -79,8 +79,15 @@ Or use `zerofs-ninep` for 9P (ReadWriteOnce).
 | `protocol` | `nfs` or `ninep` | `nfs` |
 | `encryptionPassword` | Encryption key for data at rest | `default-zerofs-encryption-key` |
 | `cacheSizeGB` | Local cache size in GB | `10` |
+| `cacheDir` | Local cache directory | `/data/cache` |
 
 Credentials must come from a Secret (raw keys in parameters are ignored).
+
+`cacheDir` must resolve inside the `emptyDir` the server pod mounts at `/data`.
+ZeroFS creates per-bucket subdirectories under it at startup and exits if it
+cannot, so pointing it anywhere else lands on the container's root-owned
+filesystem where the non-root `zerofs` user has no write access, and every
+volume pod crash-loops.
 
 ## Testing
 
