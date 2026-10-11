@@ -26,7 +26,12 @@
 #   E2E_SKIP          replaces the default ginkgo skip
 #   E2E_ARGS          extra flags handed to e2e.test
 #   DRIVER_IMAGE      driver image tag to build and load (default: ghcr.io/sorend/csi-driver-zerofs:latest)
-#   ZEROFS_IMAGE      ZeroFS server image (default: ghcr.io/barre/zerofs:1.0.4)
+#   ZEROFS_IMAGE      ZeroFS server image (default: ghcr.io/barre/zerofs:1.0.4).
+#                     Also passed to the driver via --zerofs-image, since that
+#                     is what the per-volume Deployment actually uses.
+#   LOAD_ZEROFS_LOCALLY
+#                     set to 1 to side-load ${ZEROFS_IMAGE} from the local
+#                     docker daemon instead of pulling it from a registry
 #   BUCKET            S3 bucket backing the volumes (default: zerofs-data)
 #   WORK_DIR          scratch dir for the test artifacts (default: /tmp/csi-e2e-run)
 #   KEEP_CLUSTER      set to 1 to keep the kind cluster on exit
@@ -143,9 +148,11 @@ log "Loading driver image into kind"
 kind load docker-image "$DRIVER_IMAGE" --name "$KIND_CLUSTER"
 
 log "Pulling ZeroFS server image ${ZEROFS_IMAGE} into kind"
-if docker image inspect "$ZEROFS_IMAGE" >/dev/null 2>&1; then
-    # A locally built image (for testing a patched ZeroFS) is side-loaded,
-    # since it will not be resolvable from a registry.
+if [ "${LOAD_ZEROFS_LOCALLY:-0}" = "1" ]; then
+    # Side-load a locally built image, for testing a patched ZeroFS that is
+    # not published to a registry. The image still has to exist locally.
+    docker image inspect "$ZEROFS_IMAGE" >/dev/null 2>&1 \
+        || { log "ERROR: ${ZEROFS_IMAGE} not found locally"; exit 1; }
     kind load docker-image "$ZEROFS_IMAGE" --name "$KIND_CLUSTER"
 else
     docker exec "${KIND_CLUSTER}-control-plane" \
