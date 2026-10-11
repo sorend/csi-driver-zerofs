@@ -74,6 +74,59 @@ jobs:
         if: always()
         run: kind delete cluster --name zerofs-sanity
 
+  e2e-test:
+    runs-on: ubuntu-latest
+    needs: build
+    # The external storage suite mounts a real NFS export from a pod on every
+    # node, provisions many volumes in parallel and restarts pods repeatedly.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run external storage e2e suite
+        env:
+          KIND_CLUSTER: zerofs-e2e
+          DRIVER_IMAGE: ghcr.io/${{ github.repository }}:latest
+          KEEP_CLUSTER: 1
+        run: make e2e-test
+
+      - name: Dump CSI driver logs on failure
+        if: failure()
+        run: |
+          kubectl logs -n zerofs-csi deployment/zerofs-csi-controller \
+            -c zerofs-plugin --tail=200 || true
+          kubectl logs -n zerofs-csi deployment/zerofs-csi-controller \
+            -c csi-provisioner --tail=100 || true
+          kubectl logs -n zerofs-csi daemonset/zerofs-csi-node \
+            -c zerofs-plugin --tail=100 || true
+
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          echo "=== Pods ==="
+          kubectl get pods -A -o wide || true
+          echo "=== Persistent volumes ==="
+          kubectl get pv -o wide || true
+          echo "=== Persistent volume claims ==="
+          kubectl get pvc -A || true
+          echo "=== Per-volume ZeroFS deployments ==="
+          kubectl get deployments -n zerofs-csi || true
+
+      - name: Upload e2e report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-e2e
+          path: /tmp/csi-e2e-run/junit_e2e.xml
+          if-no-files-found: ignore
+
+      - name: Delete kind cluster
+        if: always()
+        run: kind delete cluster --name zerofs-e2e
+
   integration-test:
     runs-on: ubuntu-latest
     needs: build

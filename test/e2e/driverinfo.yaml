@@ -1,0 +1,75 @@
+# Driver definition for the Kubernetes external storage e2e suite
+# (test/e2e/storage/external, enabled through e2e.test's -storage.testdriver).
+#
+# e2e.test only runs the tests that a driver definition enables: StorageClass
+# selects dynamic provisioning, DriverInfo.Capabilities switches individual
+# test suites on and off. Anything left out here is skipped rather than failed.
+#
+# Kept in sync with the driver itself:
+#   pkg/driver/validation.go  - access modes and block support
+#   pkg/driver/node.go        - node capabilities and topology
+#   pkg/driver/controller.go  - controller capabilities
+#
+# The `zerofs` StorageClass (NFS, ReadWriteMany) from deploy/storageclasses.yaml
+# is what gets exercised.
+StorageClass:
+  FromExistingClassName: zerofs
+
+DriverInfo:
+  Name: zerofs.csi.sorend.github.com
+  # Largest file the volumeIO suite writes. 100MiB matches the upstream
+  # FileSizeMedium default and keeps a full run within a sane time budget.
+  MaxFileSize: 104857600
+  Capabilities:
+    # Data survives pod restarts; the volume is an NFS export.
+    persistence: true
+    # The NFS protocol serves one export to many nodes and many writers.
+    RWX: true
+    # NodeStageVolume mounts once, NodePublishVolume bind-mounts per pod.
+    multipods: true
+    # Plain filesystem mount, exec works.
+    exec: true
+    # The driver only ever looks at the CSI volume handle, never at the
+    # PersistentVolume object, so two PVs sharing a handle behave the same as
+    # one PV as far as the node service is concerned.
+    multiplePVsSameID: true
+
+    # Not claimed:
+    #   fsGroup          - CSIDriver sets fsGroupPolicy: File, so kubelet does the
+    #                   work itself: it chowns the volume root to root:<fsGroup>
+    #                   and sets the setgid bit. That part works, but the
+    #                   ZeroFS server does not implement setgid gid inheritance
+    #                   on create, so a new file lands root:root instead of
+    #                   inheriting the directory's gid. Reproduced directly
+    #                   against a mounted export:
+    #                     chown root:1000 dir; chmod g+s dir   # dir becomes drwxr-sr-x root:1000
+    #                     touch dir/explicit && chown 0:1000 dir/explicit   # gid 1000, chown works
+    #                     touch dir/inherited                                # gid 0, should be 1000
+    #                   Fixed in a fork (sorend/ZeroFS, branch
+    #                   fix/setgid-inheritance-on-create): all seven specs pass
+    #                   in 199s against a patched build, versus 3 failures and
+    #                   ~20min each in cleanup against 1.0.4. Not claimed until
+    #                   it ships in a released ZeroFS image, since the default
+    #                   ZEROFS_IMAGE is still the unpatched 1.0.4.
+    #                   See FINDINGS.md and upstream ZeroFS create.rs.
+    #   block            - validateVolumeCapabilities rejects block volumes.
+    #   controllerExpansion - ControllerExpandVolume is implemented and the
+    #                      `zerofs` StorageClass sets allowVolumeExpansion, but
+    #                      the controller Deployment has no external-resizer
+    #                      sidecar, so nothing ever calls it and the PVC size
+    #                      edit the suite makes would never be picked up. The
+    #                      capability stays off until the resizer is deployed.
+    #   topology         - CSIDriver publishes no allowedTopologies and
+    #                      CreateVolume does not return AccessibleTopology, so
+    #                      the topology suite cannot pass.
+    #   volumeLimits     - MaxVolumesPerNode is hardcoded to 1000 and there is
+    #                      no --maxvolumespernode flag to lower it for the test.
+    #   singleNodeVolume - NFS volumes are reachable from any node.
+    #   readWriteOncePod - not implemented.
+    #   snapshot*        - CreateSnapshot returns Unimplemented.
+    block: false
+    fsGroup: false
+    topology: false
+    volumeLimits: false
+    singleNodeVolume: false
+    readWriteOncePod: false
