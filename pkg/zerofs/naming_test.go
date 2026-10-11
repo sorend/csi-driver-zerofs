@@ -56,7 +56,7 @@ var _ = ginkgo.Describe("k8sName", func() {
 	})
 
 	ginkgo.It("should produce names that are valid for every managed object", func() {
-		manager := NewManager("default", "/var/lib/zerofs-csi", "ghcr.io/barre/zerofs:1.0.4")
+		manager := NewManager("default", "/var/lib/zerofs-csi", "ghcr.io/barre/zerofs:2.3.5")
 
 		ids := []string{
 			"pvc-12345",

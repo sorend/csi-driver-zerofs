@@ -12,7 +12,7 @@ driver. Not all of these are this repository's to fix.
 **Status:** Fixed in a fork ([sorend/ZeroFS](https://github.com/sorend/ZeroFS),
 branch `fix/setgid-inheritance-on-create`) and verified end to end. Not yet in an
 upstream release, so `test/e2e/driverinfo.yaml` still has `fsGroup: false`
-against the default `ghcr.io/barre/zerofs:1.0.4` image.
+against the default `ghcr.io/barre/zerofs:2.3.5` image.
 
 ### The fix
 
@@ -46,15 +46,16 @@ End to end, through real NFS and real kubelet `fsGroup` handling:
 | ZeroFS image                    | fsGroup suite result                    |
 | ------------------------------- | --------------------------------------- |
 | `ghcr.io/barre/zerofs:1.0.4`    | 3 specs FAIL, ~20 min each in cleanup   |
+| `ghcr.io/barre/zerofs:2.3.5`    | still unfixed, same 3 specs FAIL        |
 | fork build with the fix         | `7 Passed, 0 Failed` in 199 seconds     |
 
 The unpatched run does not merely fail the assertions, it burns 20 minutes per
 spec in namespace teardown before reporting anything.
 
-Note that the fork build is from `main` (v2.3.5), not the 1.0.4 release - those
-are different builds and 1.0.4 has a different default cache path. The fix is
-made against `main` since that is what an upstream change has to target;
-backporting to 1.0.4 is separate work and was not done.
+The fix is still not in an upstream release as of ZeroFS 2.3.5: the pull request
+([barre/ZeroFS#646](https://github.com/Barre/ZeroFS/pull/646)) is open and
+unmerged, and `zerofs/src/fs/ops/create.rs` is byte-identical between `main` and
+the `v2.3.5` tag, so both still only honour the parent setgid in `mkdir`.
 
 **Affects:** `test/e2e/driverinfo.yaml` (`fsGroup` is therefore `false`), which
 makes the seven `fsgroupchangepolicy` specs skip.

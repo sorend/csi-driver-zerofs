@@ -11,7 +11,7 @@
 #   kind create cluster --name zerofs-integration --config test/kind-config.yaml
 #   docker build -t ghcr.io/sorend/csi-driver-zerofs:latest .
 #   kind load docker-image ghcr.io/sorend/csi-driver-zerofs:latest --name zerofs-integration
-#   docker exec zerofs-integration-control-plane ctr --namespace=k8s.io images pull ghcr.io/barre/zerofs:1.0.4
+#   docker exec zerofs-integration-control-plane ctr --namespace=k8s.io images pull ghcr.io/barre/zerofs:2.3.5
 #   kubectl --context kind-zerofs-integration apply -f deploy/install.yaml
 #   # patch imagePullPolicy to Never for local image
 #   kubectl --context kind-zerofs-integration patch deployment zerofs-csi-controller -n zerofs-csi \

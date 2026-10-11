@@ -31,7 +31,7 @@ SANITY_POD="zerofs-csi-sanity"
 SANITY_CONTAINER="zerofs-plugin"
 SANITY_PORT=10000
 DRIVER_IMAGE="${DRIVER_IMAGE:-ghcr.io/sorend/csi-driver-zerofs:latest}"
-ZEROFS_IMAGE="${ZEROFS_IMAGE:-ghcr.io/barre/zerofs:1.0.4}"
+ZEROFS_IMAGE="${ZEROFS_IMAGE:-ghcr.io/barre/zerofs:2.3.5}"
 BUCKET="${BUCKET:-zerofs-data}"
 WORK_DIR="${WORK_DIR:-/tmp/csi-sanity}"
 

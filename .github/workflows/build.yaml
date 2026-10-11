@@ -170,7 +170,7 @@ jobs:
         run: |
           docker exec zerofs-integration-control-plane \
             ctr --namespace=k8s.io images pull \
-            ghcr.io/barre/zerofs:1.0.4
+            ghcr.io/barre/zerofs:2.3.5
 
       - name: Deploy CSI driver
         run: |

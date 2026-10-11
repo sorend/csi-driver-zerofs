@@ -37,7 +37,7 @@ func init() {
 	controllerCmd.Flags().StringVar(&namespace, "namespace", "default", "namespace to run in")
 	controllerCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file")
 	controllerCmd.Flags().StringVar(&workDir, "work-dir", "/var/lib/zerofs-csi", "working directory")
-	controllerCmd.Flags().StringVar(&zerofsImage, "zerofs-image", "ghcr.io/barre/zerofs:1.0.4", "ZeroFS server container image")
+	controllerCmd.Flags().StringVar(&zerofsImage, "zerofs-image", "ghcr.io/barre/zerofs:2.3.5", "ZeroFS server container image")
 
 	nodeCmd.Flags().StringVar(&driverName, "driver-name", driver.DriverName, "name of the CSI driver")
 	nodeCmd.Flags().StringVar(&nodeID, "node-id", "", "node ID")
@@ -52,7 +52,7 @@ func init() {
 	sanityCmd.Flags().StringVar(&namespace, "namespace", "default", "namespace to run in")
 	sanityCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file")
 	sanityCmd.Flags().StringVar(&workDir, "work-dir", "/var/lib/zerofs-csi", "working directory")
-	sanityCmd.Flags().StringVar(&zerofsImage, "zerofs-image", "ghcr.io/barre/zerofs:1.0.4", "ZeroFS server container image")
+	sanityCmd.Flags().StringVar(&zerofsImage, "zerofs-image", "ghcr.io/barre/zerofs:2.3.5", "ZeroFS server container image")
 }
 
 var rootCmd = &cobra.Command{

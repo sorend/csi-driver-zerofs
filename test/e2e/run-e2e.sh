@@ -26,7 +26,7 @@
 #   E2E_SKIP          replaces the default ginkgo skip
 #   E2E_ARGS          extra flags handed to e2e.test
 #   DRIVER_IMAGE      driver image tag to build and load (default: ghcr.io/sorend/csi-driver-zerofs:latest)
-#   ZEROFS_IMAGE      ZeroFS server image (default: ghcr.io/barre/zerofs:1.0.4).
+#   ZEROFS_IMAGE      ZeroFS server image (default: ghcr.io/barre/zerofs:2.3.5).
 #                     Also passed to the driver via --zerofs-image, since that
 #                     is what the per-volume Deployment actually uses.
 #   LOAD_ZEROFS_LOCALLY
@@ -54,7 +54,7 @@ E2E_BIN_DIR="${E2E_BIN_DIR:-/tmp/csi-e2e}"
 E2E_TEST_BIN="${E2E_BIN_DIR}/e2e.test"
 
 DRIVER_IMAGE="${DRIVER_IMAGE:-ghcr.io/sorend/csi-driver-zerofs:latest}"
-ZEROFS_IMAGE="${ZEROFS_IMAGE:-ghcr.io/barre/zerofs:1.0.4}"
+ZEROFS_IMAGE="${ZEROFS_IMAGE:-ghcr.io/barre/zerofs:2.3.5}"
 BUCKET="${BUCKET:-zerofs-data}"
 WORK_DIR="${WORK_DIR:-/tmp/csi-e2e-run}"
 JUNIT_REPORT="${WORK_DIR}/junit_e2e.xml"

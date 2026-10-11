@@ -13,7 +13,37 @@
   "recreateClosed": true,
   "rebaseWhen": "behind-base-branch",
   "rangeStrategy": "bump",
+  "regexManagers": [
+    {
+      "description": "Track the ZeroFS server image used by the per-volume Deployment",
+      "fileMatch": [
+        "^deploy/install\\.yaml$",
+        "^deploy/install\\.yaml\\.tpl$",
+        "^cmd/csi-driver-zerofs/main\\.go$",
+        "^test/sanity/plugin\\.yaml$",
+        "^test/sanity/run-sanity\\.sh$",
+        "^test/e2e/run-e2e\\.sh$",
+        "^test/integration-test\\.bats$",
+        "^\\.github/workflows/build\\.yaml$"
+      ],
+      "matchStrings": [
+        "ghcr\\.io/barre/zerofs:(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)"
+      ],
+      "depNameTemplate": "ghcr.io/barre/zerofs",
+      "datasourceTemplate": "docker"
+    }
+  ],
   "packageRules": [
+    {
+      "description": "Bump the ZeroFS server image everywhere it is referenced",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/barre/zerofs"
+      ],
+      "groupName": "zerofs image"
+    },
     {
       "description": "Automerge patch, digest and lock-file-only updates",
       "matchUpdateTypes": [
