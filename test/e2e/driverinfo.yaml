@@ -39,15 +39,19 @@ DriverInfo:
     #                   work itself: it chowns the volume root to root:<fsGroup>
     #                   and sets the setgid bit. That part works, but the
     #                   ZeroFS server does not implement setgid gid inheritance
-    #                   on file create, so a new file lands root:root instead of
+    #                   on create, so a new file lands root:root instead of
     #                   inheriting the directory's gid. Reproduced directly
     #                   against a mounted export:
     #                     chown root:1000 dir; chmod g+s dir   # dir becomes drwxr-sr-x root:1000
     #                     touch dir/explicit && chown 0:1000 dir/explicit   # gid 1000, chown works
     #                     touch dir/inherited                                # gid 0, should be 1000
-    #                   Upstream ZeroFS handles this for directories but not
-    #                   for files, so the capability stays off until it is fixed
-    #                   there. See barre/zerofs create.rs.
+    #                   Fixed in a fork (sorend/ZeroFS, branch
+    #                   fix/setgid-inheritance-on-create): all seven specs pass
+    #                   in 199s against a patched build, versus 3 failures and
+    #                   ~20min each in cleanup against 1.0.4. Not claimed until
+    #                   it ships in a released ZeroFS image, since the default
+    #                   ZEROFS_IMAGE is still the unpatched 1.0.4.
+    #                   See FINDINGS.md and upstream ZeroFS create.rs.
     #   block            - validateVolumeCapabilities rejects block volumes.
     #   controllerExpansion - ControllerExpandVolume is implemented and the
     #                      `zerofs` StorageClass sets allowVolumeExpansion, but

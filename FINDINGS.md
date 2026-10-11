@@ -9,8 +9,52 @@ driver. Not all of these are this repository's to fix.
 
 **Severity:** High - blocks the `fsGroup` capability entirely.
 
-**Status:** Open, not fixable from this repository. Needs a change in
-[barre/zerofs](https://github.com/barre/zerofs).
+**Status:** Fixed in a fork ([sorend/ZeroFS](https://github.com/sorend/ZeroFS),
+branch `fix/setgid-inheritance-on-create`) and verified end to end. Not yet in an
+upstream release, so `test/e2e/driverinfo.yaml` still has `fsGroup: false`
+against the default `ghcr.io/barre/zerofs:1.0.4` image.
+
+### The fix
+
+`mkdir` already had the right logic. The same check was missing from three
+sibling paths in the same crate, so the fix is to apply the identical rule:
+
+- `create.rs`, `create` - regular files
+- `create.rs`, `mknod` - fifos, sockets, devices
+- `link.rs`, `symlink`
+
+Hard links are deliberately untouched: they share the source inode, so Linux
+keeps the source's group rather than inheriting from the new parent. That is
+covered by a regression test.
+
+Regular files still do **not** inherit the setgid bit itself, only directories
+do, matching Linux and the existing `mkdir` behaviour. An explicitly requested
+gid still wins over inheritance.
+
+### Verification
+
+Unit level, in the fork:
+
+- 8 new tests across `create.rs` and `link.rs`; full suite `866 passed, 0 failed`.
+- Each inheritance test fails when its hunk is reverted (`left: 1000,
+  right: 2000` - the caller's group instead of the parent's) and passes with it.
+  They use a parent group of 2000 against a caller group of 1000 so inheritance
+  is observable; had both been 1000 the tests would pass with or without the fix.
+
+End to end, through real NFS and real kubelet `fsGroup` handling:
+
+| ZeroFS image                    | fsGroup suite result                    |
+| ------------------------------- | --------------------------------------- |
+| `ghcr.io/barre/zerofs:1.0.4`    | 3 specs FAIL, ~20 min each in cleanup   |
+| fork build with the fix         | `7 Passed, 0 Failed` in 199 seconds     |
+
+The unpatched run does not merely fail the assertions, it burns 20 minutes per
+spec in namespace teardown before reporting anything.
+
+Note that the fork build is from `main` (v2.3.5), not the 1.0.4 release - those
+are different builds and 1.0.4 has a different default cache path. The fix is
+made against `main` since that is what an upstream change has to target;
+backporting to 1.0.4 is separate work and was not done.
 
 **Affects:** `test/e2e/driverinfo.yaml` (`fsGroup` is therefore `false`), which
 makes the seven `fsgroupchangepolicy` specs skip.

@@ -76,8 +76,10 @@ out:
   ```
 
   Upstream ZeroFS implements the inheritance for directories but not for files,
-  so this cannot be worked around from the driver. Not claimed until it is fixed
-  in ZeroFS.
+  so this cannot be worked around from the driver. The fix is written and
+  verified - all seven specs pass in 199s against a patched build, against 3
+  failures on 1.0.4 - see `FINDINGS.md` for the branch and the unit-level proof.
+  Not claimed until it ships in a released image.
 * **Volume expansion** - `ControllerExpandVolume` is implemented and the
   `zerofs` StorageClass sets `allowVolumeExpansion: true`, but the controller
   Deployment has no `external-resizer` sidecar, so nothing ever calls it. Not

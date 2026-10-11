@@ -143,14 +143,23 @@ log "Loading driver image into kind"
 kind load docker-image "$DRIVER_IMAGE" --name "$KIND_CLUSTER"
 
 log "Pulling ZeroFS server image ${ZEROFS_IMAGE} into kind"
-docker exec "${KIND_CLUSTER}-control-plane" \
-    ctr --namespace=k8s.io images pull "$ZEROFS_IMAGE"
+if docker image inspect "$ZEROFS_IMAGE" >/dev/null 2>&1; then
+    # A locally built image (for testing a patched ZeroFS) is side-loaded,
+    # since it will not be resolvable from a registry.
+    kind load docker-image "$ZEROFS_IMAGE" --name "$KIND_CLUSTER"
+else
+    docker exec "${KIND_CLUSTER}-control-plane" \
+        ctr --namespace=k8s.io images pull "$ZEROFS_IMAGE"
+fi
 
 log "Deploying CSI driver"
 kubectl_cmd apply -f "${ROOT_DIR}/deploy/install.yaml"
+# Strategic merge replaces the whole args list, so every original flag has to be
+# repeated here. Only --zerofs-image is overridden, to let a locally built
+# ZeroFS be tested.
 kubectl_cmd patch deployment zerofs-csi-controller -n "$NAMESPACE" \
     --type=strategic \
-    -p '{"spec":{"template":{"spec":{"containers":[{"name":"zerofs-plugin","imagePullPolicy":"Never"}]}}}}'
+    -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"zerofs-plugin\",\"imagePullPolicy\":\"Never\",\"args\":[\"controller\",\"--endpoint=\$(CSI_ENDPOINT)\",\"--namespace=${NAMESPACE}\",\"--zerofs-image=${ZEROFS_IMAGE}\"]}]}}}}"
 kubectl_cmd patch daemonset zerofs-csi-node -n "$NAMESPACE" \
     --type=strategic \
     -p '{"spec":{"template":{"spec":{"containers":[{"name":"zerofs-plugin","imagePullPolicy":"Never"}]}}}}'
