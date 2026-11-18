@@ -26,14 +26,14 @@ var _ = ginkgo.Describe("Manager", func() {
 	)
 
 	ginkgo.BeforeEach(func() {
-		manager = NewManager("default", "/var/lib/zerofs-csi", "ghcr.io/barre/zerofs:1.0.4")
+		manager = NewManager("default", "/var/lib/zerofs-csi", "ghcr.io/barre/zerofs:2.3.7")
 	})
 
 	ginkgo.Context("NewManager", func() {
 		ginkgo.It("should create a manager with correct settings", func() {
 			gomega.Expect(manager.namespace).To(gomega.Equal("default"))
 			gomega.Expect(manager.workDir).To(gomega.Equal("/var/lib/zerofs-csi"))
-			gomega.Expect(manager.zerofsImage).To(gomega.Equal("ghcr.io/barre/zerofs:1.0.4"))
+			gomega.Expect(manager.zerofsImage).To(gomega.Equal("ghcr.io/barre/zerofs:2.3.7"))
 		})
 	})
 
@@ -62,6 +62,7 @@ var _ = ginkgo.Describe("Manager", func() {
 		ginkgo.It("should generate valid config with defaults for NFS", func() {
 			config, err := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, nil, nil)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(config).To(gomega.ContainSubstring(`dir = "/tmp/zerofs-cache"`))
 			gomega.Expect(config).To(gomega.ContainSubstring("s3://my-bucket/data"))
 			gomega.Expect(config).To(gomega.ContainSubstring("0.0.0.0:2049"))
 		})
@@ -228,7 +229,7 @@ var _ = ginkgo.Describe("Manager", func() {
 
 			container := deployment.Spec.Template.Spec.Containers[0]
 			gomega.Expect(container.Name).To(gomega.Equal("zerofs"))
-			gomega.Expect(container.Image).To(gomega.Equal("ghcr.io/barre/zerofs:1.0.4"))
+			gomega.Expect(container.Image).To(gomega.Equal("ghcr.io/barre/zerofs:2.3.7"))
 			gomega.Expect(container.Ports).To(gomega.HaveLen(1))
 		})
 
