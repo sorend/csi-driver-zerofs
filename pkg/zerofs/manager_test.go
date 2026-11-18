@@ -62,6 +62,7 @@ var _ = ginkgo.Describe("Manager", func() {
 		ginkgo.It("should generate valid config with defaults for NFS", func() {
 			config, err := manager.generateConfig("s3://my-bucket/data", ProtocolNFS, nil, nil)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(config).To(gomega.ContainSubstring(`dir = "/tmp/zerofs-cache"`))
 			gomega.Expect(config).To(gomega.ContainSubstring("s3://my-bucket/data"))
 			gomega.Expect(config).To(gomega.ContainSubstring("0.0.0.0:2049"))
 		})

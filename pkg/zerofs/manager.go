@@ -404,7 +404,8 @@ func (m *Manager) generateConfigWithContext(ctx context.Context, storageURL stri
 
 	cacheDir := params["cacheDir"]
 	if cacheDir == "" {
-		cacheDir = "/var/lib/zerofs/cache"
+		// The ZeroFS image runs as a non-root user and cannot write under /var/lib.
+		cacheDir = "/tmp/zerofs-cache"
 	}
 
 	cacheSizeGB := params["cacheSizeGB"]

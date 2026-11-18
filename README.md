@@ -11,6 +11,10 @@
 
 A Kubernetes CSI driver that provides persistent storage backed by S3-compatible object storage via [ZeroFS](https://github.com/barre/zerofs). Volumes are served over NFS (ReadWriteMany) or 9P (ReadWriteOnce).
 
+## Upgrading from ZeroFS 1.x
+
+**ZeroFS 2.x cannot open 1.x volumes.** The [2.0 release changed the storage format](https://github.com/barre/zerofs/releases/tag/v2.0.0), and there is no in-place migration tool. Leave existing volume servers on 1.x. To migrate, provision a new 2.x PVC backed by a separate S3 prefix, copy the files through the mounted filesystems, and verify the copy before switching workloads. Do not delete the old PVC to trigger a migration; a `Delete` reclaim policy can remove its data.
+
 ## Quick Start with RustFS
 
 ### 1. Deploy the CSI driver and RustFS
