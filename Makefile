@@ -1,4 +1,4 @@
-.PHONY: all build test clean docker-build docker-push install lint fmt vet release release-snapshot release-check render-manifests csi-sanity-install sanity-test
+.PHONY: all build test clean docker-build docker-push install lint fmt vet release release-snapshot release-check render-manifests csi-sanity-install sanity-test e2e-test
 
 REGISTRY ?= ghcr.io/sorend
 IMAGE_NAME ?= csi-driver-zerofs
@@ -13,6 +13,7 @@ GORELEASER ?= goreleaser
 GORELEASER_IMAGE ?= goreleaser/goreleaser:latest
 CSI_SANITY_VERSION ?= v5.6.0
 CSI_SANITY_BIN ?= $(shell go env GOPATH)/bin/csi-sanity
+K8S_VERSION ?= v1.37.0
 GORELEASER_RUN = sh -ec 'if command -v "$(GORELEASER)" >/dev/null 2>&1; then exec "$(GORELEASER)" "$$@"; fi; exec docker run --rm -v "$(CURDIR):/workspace" -w /workspace -e GITHUB_REPOSITORY="$$GITHUB_REPOSITORY" -e GITHUB_TOKEN "$(GORELEASER_IMAGE)" "$$@"' --
 
 all: build
@@ -42,6 +43,12 @@ csi-sanity-install:
 # Runs the CSI sanity suite against the driver inside a throwaway kind cluster.
 sanity-test: csi-sanity-install
 	CSI_SANITY_BIN="$(CSI_SANITY_BIN)" ./test/sanity/run-sanity.sh
+
+# Runs the Kubernetes external storage e2e suite (test/e2e/storage/external)
+# against the driver in a throwaway multi-node kind cluster. e2e.test is
+# downloaded from the kubernetes-test tarball matching KIND_NODE_IMAGE.
+e2e-test:
+	K8S_VERSION="$(K8S_VERSION)" ./test/e2e/run-e2e.sh
 
 lint:
 	golangci-lint run ./...
@@ -94,6 +101,7 @@ help:
 	@echo "  test-coverage     - Run tests with coverage report"
 	@echo "  csi-sanity-install - Install the csi-sanity binary ($(CSI_SANITY_VERSION))"
 	@echo "  sanity-test       - Run csi-sanity against the driver in a kind cluster"
+	@echo "  e2e-test          - Run the Kubernetes external storage e2e suite in a kind cluster ($(K8S_VERSION))"
 	@echo "  lint              - Run golangci-lint"
 	@echo "  fmt               - Format Go code"
 	@echo "  vet               - Run go vet"
