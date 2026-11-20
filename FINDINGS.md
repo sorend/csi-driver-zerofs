@@ -7,12 +7,9 @@ driver. Not all of these are this repository's to fix.
 
 ## 1. setgid gid inheritance is not applied when creating a file (upstream: ZeroFS)
 
-**Severity:** High - blocks the `fsGroup` capability entirely.
-
-**Status:** Fixed in a fork ([sorend/ZeroFS](https://github.com/sorend/ZeroFS),
-branch `fix/setgid-inheritance-on-create`) and verified end to end. Not yet in an
-upstream release, so `test/e2e/driverinfo.yaml` still has `fsGroup: false`
-against the default `ghcr.io/barre/zerofs:1.0.4` image.
+**Status:** Fixed in ZeroFS 2.3.7 ([Barre/ZeroFS#646](https://github.com/Barre/ZeroFS/pull/646)).
+The e2e suite enables `fsGroup` with this image. The results below document the
+failure on 1.0.4 and the original verification against the patched fork.
 
 ### The fix
 
@@ -56,10 +53,7 @@ are different builds and 1.0.4 has a different default cache path. The fix is
 made against `main` since that is what an upstream change has to target;
 backporting to 1.0.4 is separate work and was not done.
 
-**Affects:** `test/e2e/driverinfo.yaml` (`fsGroup` is therefore `false`), which
-makes the seven `fsgroupchangepolicy` specs skip.
-
-### What happens
+### What happened on 1.0.4
 
 A pod with an `fsGroup` writes a file into the volume. The file comes out
 `root:root` instead of inheriting the pod's fsGroup, so

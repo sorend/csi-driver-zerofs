@@ -56,34 +56,14 @@ The default `-ginkgo.skip` drops two classes of spec:
 
 Capabilities that are not claimed in `driverinfo.yaml` also cause their suites
 to skip: block volumes, topology, volume limits, snapshots, single-node volumes,
-ReadWriteOncePod, fsGroup and volume expansion. The last two are worth calling
-out:
+ReadWriteOncePod, and volume expansion. `ControllerExpandVolume` is implemented
+and the `zerofs` StorageClass sets `allowVolumeExpansion: true`, but the
+controller Deployment has no `external-resizer` sidecar to call it.
 
-* **fsGroup** - `CSIDriver` sets `fsGroupPolicy: File`, so kubelet does the work
-  itself: it chowns the volume root to `root:<fsGroup>` and sets the setgid bit.
-  That part works. The failure is in the ZeroFS server, which does not implement
-  setgid gid inheritance when creating a *file*, so a new file lands `root:root`
-  instead of inheriting the directory's gid. Confirmed directly against a
-  mounted export:
-
-  ```console
-  # chown and setgid both work - the directory ends up drwxr-sr-x root:1000
-  chown root:1000 dir && chmod g+s dir && ls -land dir
-  # explicit chown works, so it is not a permission problem
-  touch dir/explicit && chown 0:1000 dir/explicit && ls -land dir/explicit
-  # inheritance is the broken part - should be gid 1000
-  touch dir/inherited && ls -land dir/inherited
-  ```
-
-  Upstream ZeroFS implements the inheritance for directories but not for files,
-  so this cannot be worked around from the driver. The fix is written and
-  verified - all seven specs pass in 199s against a patched build, against 3
-  failures on 1.0.4 - see `FINDINGS.md` for the branch and the unit-level proof.
-  Not claimed until it ships in a released image.
-* **Volume expansion** - `ControllerExpandVolume` is implemented and the
-  `zerofs` StorageClass sets `allowVolumeExpansion: true`, but the controller
-  Deployment has no `external-resizer` sidecar, so nothing ever calls it. Not
-  claimed until the resizer is deployed.
+The `fsGroup` tests are enabled because ZeroFS 2.3.7 includes the
+[setgid inheritance fix](https://github.com/Barre/ZeroFS/pull/646). If you
+override `ZEROFS_IMAGE` with an older image, skip `fsgroupchangepolicy` or expect
+ownership assertions to fail (see [FINDINGS.md](../../FINDINGS.md)).
 
 ## Runtime
 

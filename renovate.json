@@ -13,6 +13,26 @@
   "recreateClosed": true,
   "rebaseWhen": "behind-base-branch",
   "rangeStrategy": "bump",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track ZeroFS server image tags in driver defaults and test tooling",
+      "managerFilePatterns": [
+        "/^deploy/install\\.yaml(?:\\.tpl)?$/",
+        "/^cmd/csi-driver-zerofs/main\\.go$/",
+        "/^pkg/zerofs/(?:manager|naming)_test\\.go$/",
+        "/^test/sanity/(?:plugin\\.yaml|run-sanity\\.sh)$/",
+        "/^test/e2e/run-e2e\\.sh$/",
+        "/^test/integration-test\\.bats$/",
+        "/^\\.github/workflows/build\\.yaml$/"
+      ],
+      "matchStrings": [
+        "ghcr\\.io/barre/zerofs:(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)"
+      ],
+      "depNameTemplate": "ghcr.io/barre/zerofs",
+      "datasourceTemplate": "docker"
+    }
+  ],
   "packageRules": [
     {
       "description": "Automerge patch, digest and lock-file-only updates",
@@ -25,6 +45,12 @@
       "automerge": true,
       "automergeType": "pr",
       "groupName": null
+    },
+    {
+      "description": "Keep ZeroFS server image tags in sync",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/barre/zerofs"],
+      "groupName": "zerofs image"
     },
     {
       "description": "Group the Kubernetes libraries so they stay on a compatible minor",
