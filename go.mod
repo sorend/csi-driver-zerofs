@@ -11,11 +11,11 @@ require (
 	github.com/onsi/gomega v1.44.0
 	github.com/spf13/cobra v1.10.2
 	google.golang.org/grpc v1.84.0
-	k8s.io/api v0.37.1
-	k8s.io/apimachinery v0.37.1
-	k8s.io/client-go v0.37.1
+	k8s.io/api v0.37.2
+	k8s.io/apimachinery v0.37.2
+	k8s.io/client-go v0.37.2
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/mount-utils v0.37.1
+	k8s.io/mount-utils v0.37.2
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
 )
 
