@@ -104,13 +104,36 @@ func (ns *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	switch protocol {
 	case zerofs.ProtocolNinep:
-		return ns.stageNinepVolume(volumeID, server, port, share, stagingTargetPath, volumeContext)
+		return ns.stageNinepVolume(volumeID, server, port, share, stagingTargetPath, volumeContext, req.GetVolumeCapability().GetMount().GetMountFlags())
 	default:
-		return ns.stageNFSVolume(volumeID, server, port, share, stagingTargetPath, volumeContext)
+		return ns.stageNFSVolume(volumeID, server, port, share, stagingTargetPath, volumeContext, req.GetVolumeCapability().GetMount().GetMountFlags())
 	}
 }
 
-func (ns *NodeServer) stageNFSVolume(volumeID, server, port, share, stagingTargetPath string, volumeContext map[string]string) (*csi.NodeStageVolumeResponse, error) {
+// volumeMountOptions merges defaults, legacy volume-context options and CSI mount
+// flags, in that order. Replace options by key so overrides do not depend on how
+// a mount helper or kernel handles duplicate values.
+func volumeMountOptions(defaults []string, volumeContext map[string]string, mountFlags []string) []string {
+	var options []string
+	positions := make(map[string]int)
+	for _, group := range [][]string{defaults, strings.Split(volumeContext["mountOptions"], ","), mountFlags} {
+		for _, option := range group {
+			if option == "" {
+				continue
+			}
+			key, _, _ := strings.Cut(option, "=")
+			if i, ok := positions[key]; ok {
+				options[i] = option
+			} else {
+				positions[key] = len(options)
+				options = append(options, option)
+			}
+		}
+	}
+	return options
+}
+
+func (ns *NodeServer) stageNFSVolume(volumeID, server, port, share, stagingTargetPath string, volumeContext map[string]string, mountFlags []string) (*csi.NodeStageVolumeResponse, error) {
 	source := server
 	if serverIP, ok := volumeContext["serverIP"]; ok && serverIP != "" {
 		source = serverIP
@@ -118,11 +141,8 @@ func (ns *NodeServer) stageNFSVolume(volumeID, server, port, share, stagingTarge
 	source = fmt.Sprintf("%s:%s", source, share)
 
 	mountOptions := []string{"nolock", "vers=3", "tcp", "port=2049", "mountport=2049", "soft", "timeo=30", "retrans=2"}
-	if mo, ok := volumeContext["mountOptions"]; ok && mo != "" {
-		mountOptions = strings.Split(mo, ",")
-	}
 
-	options := append([]string{}, mountOptions...)
+	options := volumeMountOptions(mountOptions, volumeContext, mountFlags)
 	if err := ns.mounter.Mount(source, stagingTargetPath, "nfs", options); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to mount NFS volume %s at %s: %v", volumeID, stagingTargetPath, err)
 	}
@@ -131,7 +151,7 @@ func (ns *NodeServer) stageNFSVolume(volumeID, server, port, share, stagingTarge
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
-func (ns *NodeServer) stageNinepVolume(volumeID, server, port, share, stagingTargetPath string, volumeContext map[string]string) (*csi.NodeStageVolumeResponse, error) {
+func (ns *NodeServer) stageNinepVolume(volumeID, server, port, share, stagingTargetPath string, volumeContext map[string]string, mountFlags []string) (*csi.NodeStageVolumeResponse, error) {
 	source := server
 	if podIP, ok := volumeContext["podIP"]; ok && podIP != "" {
 		source = podIP
@@ -140,16 +160,16 @@ func (ns *NodeServer) stageNinepVolume(volumeID, server, port, share, stagingTar
 	}
 
 	mountOptions := []string{
-		fmt.Sprintf("trans=tcp"),
+		"trans=tcp",
 		fmt.Sprintf("port=%s", port),
 		"version=9p2000.L",
 		"msize=65536",
-	}
-	if mo, ok := volumeContext["mountOptions"]; ok && mo != "" {
-		mountOptions = strings.Split(mo, ",")
+		// The default cache=none disables shared writable mmap, which SQLite
+		// WAL needs for its -shm file (otherwise SQLITE_IOERR_SHMMAP).
+		"cache=mmap",
 	}
 
-	options := append([]string{}, mountOptions...)
+	options := volumeMountOptions(mountOptions, volumeContext, mountFlags)
 	if err := ns.mounter.Mount(source, stagingTargetPath, "9p", options); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to mount 9P volume %s at %s: %v", volumeID, stagingTargetPath, err)
 	}
