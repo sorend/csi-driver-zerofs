@@ -10,6 +10,7 @@ import (
 	"github.com/onsi/gomega"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/mount-utils"
 )
 
 var _ = ginkgo.Describe("NodeServer", func() {
@@ -62,6 +63,56 @@ var _ = ginkgo.Describe("NodeServer", func() {
 	})
 
 	ginkgo.Context("NodeStageVolume", func() {
+		ginkgo.DescribeTable("should pass effective mount options to the mounter",
+			func(protocol string, volumeOptions string, flags, expected []string) {
+				fakeMounter := mount.NewFakeMounter(nil)
+				ns.mounter.Interface = fakeMounter
+				stagingPath, err := os.MkdirTemp("", "zerofs-stage-")
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				defer os.RemoveAll(stagingPath)
+
+				port := "2049"
+				if protocol == "ninep" {
+					port = "5564"
+				}
+				_, err = ns.NodeStageVolume(context.Background(), &csi.NodeStageVolumeRequest{
+					VolumeId:          "test-volume",
+					StagingTargetPath: stagingPath,
+					VolumeContext: map[string]string{
+						"protocol":     protocol,
+						"serverIP":     "10.0.0.1",
+						"port":         port,
+						"mountOptions": volumeOptions,
+					},
+					VolumeCapability: &csi.VolumeCapability{
+						AccessType: &csi.VolumeCapability_Mount{
+							Mount: &csi.VolumeCapability_MountVolume{MountFlags: flags},
+						},
+						AccessMode: &csi.VolumeCapability_AccessMode{Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER},
+					},
+				})
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				mounts, err := fakeMounter.List()
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(mounts).To(gomega.HaveLen(1))
+				gomega.Expect(mounts[0].Opts).To(gomega.ConsistOf(expected))
+			},
+			ginkgo.Entry("9P defaults support shared writable mmap", "ninep", "", nil,
+				[]string{"trans=tcp", "port=5564", "version=9p2000.L", "msize=65536", "cache=mmap"}),
+			ginkgo.Entry("StorageClass flags override 9P defaults without dropping the port", "ninep", "",
+				[]string{"msize=262144", "cache=none", "ro"},
+				[]string{"trans=tcp", "port=5564", "version=9p2000.L", "msize=262144", "cache=none", "ro"}),
+			ginkgo.Entry("legacy volume options retain required 9P defaults", "ninep", "msize=131072", nil,
+				[]string{"trans=tcp", "port=5564", "version=9p2000.L", "msize=131072", "cache=mmap"}),
+			ginkgo.Entry("CSI flags take precedence over legacy options", "ninep", "cache=loose,msize=131072",
+				[]string{"cache=mmap", "msize=65536", "trans=tcp"},
+				[]string{"trans=tcp", "port=5564", "version=9p2000.L", "msize=65536", "cache=mmap"}),
+			ginkgo.Entry("NFS defaults are unchanged", "nfs", "", nil,
+				[]string{"nolock", "vers=3", "tcp", "port=2049", "mountport=2049", "soft", "timeo=30", "retrans=2"}),
+			ginkgo.Entry("StorageClass flags are honored for NFS too", "nfs", "timeo=60", []string{"timeo=90", "ro"},
+				[]string{"nolock", "vers=3", "tcp", "port=2049", "mountport=2049", "soft", "timeo=90", "retrans=2", "ro"}),
+		)
+
 		ginkgo.It("should return error when volume ID is empty", func() {
 			_, err := ns.NodeStageVolume(context.Background(), &csi.NodeStageVolumeRequest{})
 			gomega.Expect(err).To(gomega.HaveOccurred())

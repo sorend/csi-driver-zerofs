@@ -362,7 +362,7 @@ metadata:
 spec:
   containers:
     - name: app
-      image: busybox:latest
+      image: python:3.13-alpine
       command:
         - sh
         - -c
@@ -404,6 +404,12 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" =~ "hello from zerofs 9p" ]]
     [[ "$output" =~ "second write" ]]
+}
+
+@test "9P: shared mmap and concurrent SQLite WAL transactions work" {
+    run ${KUBECTL} exec -i -n ${TEST_NAMESPACE} ${NINEP_POD} -- python3 - /data < "${BATS_TEST_DIRNAME}/ninep-io.py"
+    echo "$output"
+    [ "$status" -eq 0 ]
 }
 
 @test "9P: pod and PVC can be deleted" {

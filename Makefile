@@ -1,4 +1,4 @@
-.PHONY: all build test clean docker-build docker-push install lint fmt vet release release-snapshot release-check render-manifests csi-sanity-install sanity-test e2e-test
+.PHONY: all build test clean docker-build docker-push install lint fmt vet release release-snapshot release-check render-manifests csi-sanity-install sanity-test e2e-test ninep-io-test
 
 REGISTRY ?= ghcr.io/sorend
 IMAGE_NAME ?= csi-driver-zerofs
@@ -14,6 +14,9 @@ GORELEASER_IMAGE ?= goreleaser/goreleaser:latest
 CSI_SANITY_VERSION ?= v5.6.0
 CSI_SANITY_BIN ?= $(shell go env GOPATH)/bin/csi-sanity
 K8S_VERSION ?= v1.37.0
+NINEP_TEST_NAMESPACE ?= default
+NINEP_TEST_POD ?=
+NINEP_TEST_PATH ?= /data
 GORELEASER_RUN = sh -ec 'if command -v "$(GORELEASER)" >/dev/null 2>&1; then exec "$(GORELEASER)" "$$@"; fi; exec docker run --rm -v "$(CURDIR):/workspace" -w /workspace -e GITHUB_REPOSITORY="$$GITHUB_REPOSITORY" -e GITHUB_TOKEN "$(GORELEASER_IMAGE)" "$$@"' --
 
 all: build
@@ -49,6 +52,12 @@ sanity-test: csi-sanity-install
 # downloaded from the kubernetes-test tarball matching KIND_NODE_IMAGE.
 e2e-test:
 	K8S_VERSION="$(K8S_VERSION)" ./test/e2e/run-e2e.sh
+
+# Uses a dedicated temporary directory on an existing test pod's mount.
+# Requires Python 3 in the pod; does not modify the installation or create PVCs.
+ninep-io-test:
+	@test -n "$(NINEP_TEST_POD)" || { echo "Set NINEP_TEST_POD to a test pod with Python 3 and a mounted 9P volume"; exit 1; }
+	kubectl exec -i -n "$(NINEP_TEST_NAMESPACE)" "$(NINEP_TEST_POD)" -- python3 - "$(NINEP_TEST_PATH)" < test/ninep-io.py
 
 lint:
 	golangci-lint run ./...
@@ -102,6 +111,7 @@ help:
 	@echo "  csi-sanity-install - Install the csi-sanity binary ($(CSI_SANITY_VERSION))"
 	@echo "  sanity-test       - Run csi-sanity against the driver in a kind cluster"
 	@echo "  e2e-test          - Run the Kubernetes external storage e2e suite in a kind cluster ($(K8S_VERSION))"
+	@echo "  ninep-io-test     - Check mmap and SQLite I/O on NINEP_TEST_POD (Python 3 required)"
 	@echo "  lint              - Run golangci-lint"
 	@echo "  fmt               - Format Go code"
 	@echo "  vet               - Run go vet"

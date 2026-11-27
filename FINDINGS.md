@@ -1,7 +1,97 @@
 # Findings
 
 Issues found while running the Kubernetes external storage e2e suite against the
-driver. Not all of these are this repository's to fix.
+driver and investigating live-cluster failures. Not all of these are this
+repository's to fix.
+
+## 9P I/O errors with SQLite WAL (this repository)
+
+**Root cause confirmed on 2026-11-27:** driver v0.2.0, ZeroFS 2.3.7, Linux
+7.0.0-43-generic. This is a client mount configuration problem, not an observed
+S3 failure or a ZeroFS server crash.
+
+The node plugin mounted 9P without a `cache` option. Linux defaults to
+`cache=none`, which disables shared writable memory mappings. SQLite WAL maps
+its `-shm` file this way and reports the generic `disk I/O error` when mapping
+fails; the extended error is `SQLITE_IOERR_SHMMAP` (5386). Plain file writes and
+SQLite rollback journals can still work, masking the problem in smoke tests.
+
+A second bug prevented configuring this through a StorageClass: the plugin
+read only `volumeContext["mountOptions"]`, whereas Kubernetes supplies PV mount
+options through `volumeCapability.mount.mountFlags`. Those flags were ignored
+for both 9P and NFS.
+
+### Controlled reproduction
+
+Created a separate PVC using the installed `zerofs-ninep` class and mounted it
+in a dedicated diagnostic pod. The original PostgreSQL and SQLite workloads
+and their volumes were not modified. The same test server and backend were
+used for both cases; only the client cache option changed.
+
+| Check | Existing defaults | `cache=mmap` |
+| --- | --- | --- |
+| Shared writable 32 KiB mmap | `EINVAL` | PASS |
+| SQLite WAL create/insert/commit | `SQLITE_IOERR_SHMMAP` | PASS |
+| SQLite rollback-journal create/insert/commit | PASS | PASS |
+
+The cluster's existing concurrent stress script (4 writers, 2 readers, 60s per
+mode, `synchronous=FULL`, batches of 20 rows with 1 KiB payloads) passed on the
+corrected mount:
+
+- WAL: 204 commits, 4,080 rows, 18,779 reads, no busy retries.
+- Rollback journal: 72 commits, 1,440 rows, 205 reads, 5 busy retries.
+- Both passed the script's integrity, row-count and payload-checksum checks.
+
+These are functional tests, not evidence of crash durability under node/server
+failure. `cache=mmap` enables writeback data caching without opting into loose
+metadata caching. Applications still need `fsync`, and independent client
+mounts must not be treated as a coherent shared cache.
+
+### Fix and regression coverage
+
+- Default 9P mounts and the example StorageClass to `cache=mmap`.
+- Merge defaults, legacy context options, and CSI mount flags, with the latter
+  taking precedence by option key. Unspecified defaults such as the nonstandard
+  9P port are preserved.
+- Exercise actual `NodeStageVolume` mount arguments with fake-mounter tests.
+- Add `make ninep-io-test` and use the same mmap/concurrent SQLite probe in the
+  9P integration lifecycle tests. The probe uses and removes a unique directory.
+
+An isolated copy of the patched node plugin was also run inside the diagnostic
+pod and called over its CSI Unix socket, without registering it with kubelet:
+
+- `NodeStageVolume` with no mount flags produced `cache=0x5` (`mmap`) and port
+  5564 in `/proc/mounts`.
+- CSI flags `msize=131072,cache=mmap` changed the actual mounted message size;
+  mmap and SQLite WAL passed.
+- An explicit CSI flag `cache=none` reproduced `EINVAL` and
+  `SQLITE_IOERR_SHMMAP`, confirming that overrides now reach the kernel.
+- Repeating each stage request succeeded without mounting it again.
+
+All four checks in `make ninep-io-test` passed on the patched plugin's default
+mount, including concurrent WAL and rollback-journal writes. `make fmt`,
+`make test` (109 specs), `make vet`, and `make docker-build TAG=ninep-io-fix`
+also passed. The full kind suites were not run locally.
+
+The Linux cache modes are documented in
+[v9fs mount options](https://docs.kernel.org/filesystems/9p.html#options).
+
+### Rollout requirements and separate observations
+
+Existing mounts keep their options when the node plugin is upgraded. Stop all
+consumers of an affected PVC, let kubelet unpublish and unstage it, and restart
+them after deploying the fixed driver. StorageClass edits alone do not update
+existing PVs, and an explicit PV `cache=none` must be removed or changed.
+
+The PostgreSQL pod also showed AppArmor-denied inter-process signals and
+repeated startup/recovery cycles. This is separate evidence, not proof that
+its restarts have the same cause as SQLite WAL; PostgreSQL was not changed as
+part of this storage investigation.
+
+All diagnostic mounts were unmounted, the test pod/PVC/PV and per-volume server
+resources were deleted, and the diagnostic namespace was removed. The installed
+driver and original workload resources were left unchanged; deploying the fix
+is a separate rollout.
 
 ---
 

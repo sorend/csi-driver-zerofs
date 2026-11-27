@@ -70,6 +70,25 @@ spec:
 
 Or use `zerofs-ninep` for 9P (ReadWriteOnce).
 
+### 9P memory mapping and SQLite WAL
+
+9P mounts default to `cache=mmap` so shared writable memory mappings work.
+Without it, Linux's default `cache=none` disables these mappings and SQLite WAL
+fails with `disk I/O error` (`SQLITE_IOERR_SHMMAP`), even when ordinary file I/O
+and SQLite's rollback journal work.
+
+`cache=mmap` enables a client-side writeback data cache without the loose metadata
+caching of `cache=loose`. Use 9P volumes from a single client node; independent
+mounts are not a coherent shared cache. Applications must still use `fsync` for
+durability. These checks do not establish crash safety under node/server failure.
+
+StorageClass/PV `mountOptions` are passed through CSI mount flags and override
+driver defaults (and legacy `volumeAttributes.mountOptions`). An explicit
+`cache=none` opts out of mmap support. On an existing installation, upgrading
+the node plugin does not change mounts already in use: stop all consumers of
+the affected PVC, allow kubelet to unstage it, then restart them. Changing only
+a StorageClass does not update existing PVs.
+
 ## StorageClass Parameters
 
 | Parameter | Description | Default |
@@ -100,6 +119,18 @@ suite against it. See [test/sanity/README.md](test/sanity/README.md) for details
 (`test/e2e/storage/external`) against the driver. It needs several nodes to
 exercise the multi-node tests, so it uses a dedicated three-worker kind
 config. See [test/e2e/README.md](test/e2e/README.md) for details.
+
+To check an existing **test pod** with Python 3 and a volume mounted at `/data`:
+
+```bash
+make ninep-io-test NINEP_TEST_NAMESPACE=my-tests NINEP_TEST_POD=my-test-pod
+```
+
+Override `NINEP_TEST_PATH` for another mount path. The probe checks file I/O,
+shared writable mmap, and concurrent SQLite WAL/rollback-journal transactions
+with full synchronization, integrity checks and payload verification. It uses
+and removes its own temporary directory; it does not restart workloads or
+modify the CSI installation.
 
 ## Uninstall
 
