@@ -31,7 +31,7 @@
 #   kind delete cluster --name zerofs-integration
 #
 # Usage:
-#   bats test/integration-test.bats
+#   make integration-test
 
 KUBE_CONTEXT="kind-zerofs-integration"
 KUBECTL="kubectl --context ${KUBE_CONTEXT}"
@@ -410,6 +410,90 @@ EOF
     run ${KUBECTL} exec -i -n ${TEST_NAMESPACE} ${NINEP_POD} -- python3 - /data < "${BATS_TEST_DIRNAME}/ninep-io.py"
     echo "$output"
     [ "$status" -eq 0 ]
+}
+
+@test "9P: a fresh mount survives a changed server Pod IP without changing the PV" {
+    local volume service node node_pod server_pod old_ip service_ip checksum
+    volume=$(${KUBECTL} get pvc ${NINEP_PVC} -n ${TEST_NAMESPACE} -o jsonpath='{.spec.volumeName}')
+    service="zerofs-${volume}"
+    node=$(${KUBECTL} get pod ${NINEP_POD} -n ${TEST_NAMESPACE} -o jsonpath='{.spec.nodeName}')
+    node_pod=$(${KUBECTL} get pods -n zerofs-csi -l app.kubernetes.io/component=node \
+        --field-selector "spec.nodeName=${node}" -o jsonpath='{.items[0].metadata.name}')
+    server_pod=$(${KUBECTL} get pods -n zerofs-csi \
+        -l "zerofs.csi.sorend.github.com/volume-id=${volume}" -o jsonpath='{.items[0].metadata.name}')
+    old_ip=$(${KUBECTL} get pod "${server_pod}" -n zerofs-csi -o jsonpath='{.status.podIP}')
+    service_ip=$(${KUBECTL} get service "${service}" -n zerofs-csi -o jsonpath='{.spec.clusterIP}')
+    [ -n "$old_ip" ]
+    [ "$(${KUBECTL} get pv "$volume" -o jsonpath='{.spec.csi.volumeAttributes.podIP}')" = "$old_ip" ]
+    ${KUBECTL} exec -n ${TEST_NAMESPACE} ${NINEP_POD} -- sync
+    checksum=$(${KUBECTL} exec -n ${TEST_NAMESPACE} ${NINEP_POD} -- sha256sum /data/test.txt)
+
+    # This tests a fresh mount, not transparent recovery of an open 9P session.
+    # Keep the server running until kubelet has completely unstaged the client.
+    ${KUBECTL} delete pod ${NINEP_POD} -n ${TEST_NAMESPACE} --timeout=60s
+    local unstaged=0
+    for _ in $(seq 1 30); do
+        # This is the only 9P volume in the throwaway integration cluster.
+        if ${KUBECTL} exec -n zerofs-csi "$node_pod" -c zerofs-plugin -- \
+            sh -c '! grep -q " 9p " /proc/mounts'; then
+            unstaged=1
+            break
+        fi
+        sleep 2
+    done
+    [ "$unstaged" -eq 1 ]
+
+    ${KUBECTL} scale deployment "$service" -n zerofs-csi --replicas=0
+    ${KUBECTL} wait pod/"$server_pod" -n zerofs-csi --for=delete --timeout=90s
+    # Occupy an address before starting the replacement, including on IPAMs
+    # that immediately reuse the lowest free Pod IP.
+    ${KUBECTL} run zerofs-ninep-ip-reserver -n ${TEST_NAMESPACE} \
+        --image=busybox:latest --image-pull-policy=IfNotPresent --restart=Never \
+        --overrides="{\"spec\":{\"nodeName\":\"${node}\"}}" --command -- sleep 3600
+    ${KUBECTL} wait pod/zerofs-ninep-ip-reserver -n ${TEST_NAMESPACE} --for=condition=Ready --timeout=120s
+    ${KUBECTL} scale deployment "$service" -n zerofs-csi --replicas=1
+    ${KUBECTL} rollout status deployment/"$service" -n zerofs-csi --timeout=180s
+
+    local new_ip
+    new_ip=$(${KUBECTL} get pods -n zerofs-csi \
+        -l "zerofs.csi.sorend.github.com/volume-id=${volume}" -o jsonpath='{.items[0].status.podIP}')
+    [ -n "$new_ip" ]
+    [ "$new_ip" != "$old_ip" ]
+    [ "$(${KUBECTL} get service "$service" -n zerofs-csi -o jsonpath='{.spec.clusterIP}')" = "$service_ip" ]
+    # The original PV must still contain the now-stale address.
+    [ "$(${KUBECTL} get pv "$volume" -o jsonpath='{.spec.csi.volumeAttributes.podIP}')" = "$old_ip" ]
+
+    ${KUBECTL} apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${NINEP_POD}
+  namespace: ${TEST_NAMESPACE}
+spec:
+  nodeName: ${node}
+  containers:
+    - name: app
+      image: python:3.13-alpine
+      command: ["sleep", "3600"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ${NINEP_PVC}
+EOF
+    run wait_for_pod_running "${TEST_NAMESPACE}" "${NINEP_POD}" "${POD_READY_TIMEOUT}"
+    if [ "$status" -ne 0 ]; then
+        dump_debug "${TEST_NAMESPACE}"
+    fi
+    [ "$status" -eq 0 ]
+    [ "$(${KUBECTL} exec -n ${TEST_NAMESPACE} ${NINEP_POD} -- sha256sum /data/test.txt)" = "$checksum" ]
+    ${KUBECTL} exec -n ${TEST_NAMESPACE} ${NINEP_POD} -- \
+        awk -v source="$service_ip" '$1 == source && $2 == "/data" && $3 == "9p" { found = 1 } END { exit !found }' /proc/mounts
+    ${KUBECTL} exec -n ${TEST_NAMESPACE} ${NINEP_POD} -- \
+        sh -c 'echo after-restart >> /data/test.txt && sync && grep -q after-restart /data/test.txt'
+    ${KUBECTL} delete pod zerofs-ninep-ip-reserver -n ${TEST_NAMESPACE} --timeout=60s
 }
 
 @test "9P: pod and PVC can be deleted" {

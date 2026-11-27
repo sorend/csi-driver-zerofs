@@ -1,4 +1,4 @@
-.PHONY: all build test clean docker-build docker-push install lint fmt vet release release-snapshot release-check render-manifests csi-sanity-install sanity-test e2e-test ninep-io-test
+.PHONY: all build test clean docker-build docker-push install lint fmt vet release release-snapshot release-check render-manifests csi-sanity-install sanity-test e2e-test integration-test ninep-io-test
 
 REGISTRY ?= ghcr.io/sorend
 IMAGE_NAME ?= csi-driver-zerofs
@@ -52,6 +52,10 @@ sanity-test: csi-sanity-install
 # downloaded from the kubernetes-test tarball matching KIND_NODE_IMAGE.
 e2e-test:
 	K8S_VERSION="$(K8S_VERSION)" ./test/e2e/run-e2e.sh
+
+# Requires the prepared kind-zerofs-integration cluster described in the suite.
+integration-test:
+	bats test/integration-test.bats
 
 # Uses a dedicated temporary directory on an existing test pod's mount.
 # Requires Python 3 in the pod; does not modify the installation or create PVCs.
@@ -111,6 +115,7 @@ help:
 	@echo "  csi-sanity-install - Install the csi-sanity binary ($(CSI_SANITY_VERSION))"
 	@echo "  sanity-test       - Run csi-sanity against the driver in a kind cluster"
 	@echo "  e2e-test          - Run the Kubernetes external storage e2e suite in a kind cluster ($(K8S_VERSION))"
+	@echo "  integration-test  - Run the PVC lifecycle suite against kind-zerofs-integration"
 	@echo "  ninep-io-test     - Check mmap and SQLite I/O on NINEP_TEST_POD (Python 3 required)"
 	@echo "  lint              - Run golangci-lint"
 	@echo "  fmt               - Format Go code"

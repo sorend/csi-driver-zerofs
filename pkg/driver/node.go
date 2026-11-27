@@ -2,7 +2,9 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -20,8 +22,9 @@ import (
 const unmountTimeout = 30 * time.Second
 
 type NodeServer struct {
-	driver  *Driver
-	mounter *mount.SafeFormatAndMount
+	driver   *Driver
+	mounter  *mount.SafeFormatAndMount
+	lookupIP func(context.Context, string, string) ([]net.IP, error)
 	csi.UnimplementedNodeServer
 }
 
@@ -31,6 +34,7 @@ func NewNodeServer(d *Driver) *NodeServer {
 		mounter: &mount.SafeFormatAndMount{
 			Interface: mount.New(""),
 		},
+		lookupIP: net.DefaultResolver.LookupIP,
 	}
 }
 
@@ -104,7 +108,7 @@ func (ns *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	switch protocol {
 	case zerofs.ProtocolNinep:
-		return ns.stageNinepVolume(volumeID, server, port, share, stagingTargetPath, volumeContext, req.GetVolumeCapability().GetMount().GetMountFlags())
+		return ns.stageNinepVolume(ctx, volumeID, server, port, share, stagingTargetPath, volumeContext, req.GetVolumeCapability().GetMount().GetMountFlags())
 	default:
 		return ns.stageNFSVolume(volumeID, server, port, share, stagingTargetPath, volumeContext, req.GetVolumeCapability().GetMount().GetMountFlags())
 	}
@@ -151,12 +155,33 @@ func (ns *NodeServer) stageNFSVolume(volumeID, server, port, share, stagingTarge
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
-func (ns *NodeServer) stageNinepVolume(volumeID, server, port, share, stagingTargetPath string, volumeContext map[string]string, mountFlags []string) (*csi.NodeStageVolumeResponse, error) {
+func (ns *NodeServer) stageNinepVolume(ctx context.Context, volumeID, server, port, share, stagingTargetPath string, volumeContext map[string]string, mountFlags []string) (*csi.NodeStageVolumeResponse, error) {
 	source := server
-	if podIP, ok := volumeContext["podIP"]; ok && podIP != "" {
-		source = podIP
-	} else if serverIP, ok := volumeContext["serverIP"]; ok && serverIP != "" {
+	// A Pod IP recorded at provisioning becomes stale after a server restart.
+	// Prefer the per-volume Service; retain podIP only for legacy volumes that
+	// have neither a Service IP nor a server address.
+	if serverIP := volumeContext["serverIP"]; serverIP != "" {
 		source = serverIP
+	} else if source == "" {
+		source = volumeContext["podIP"]
+	}
+	if source == "" {
+		return nil, status.Error(codes.InvalidArgument, "9P server address missing in volume context")
+	}
+	// The kernel TCP transport accepts numeric IPv4 addresses, not hostnames;
+	// the driver image has no mount.9p helper to resolve Service DNS names.
+	if net.ParseIP(source) == nil {
+		ips, err := ns.lookupIP(ctx, "ip4", source)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, status.FromContextError(err).Err()
+			}
+			return nil, status.Errorf(codes.Internal, "failed to resolve 9P server %q: %v", source, err)
+		}
+		if len(ips) == 0 {
+			return nil, status.Errorf(codes.Internal, "9P server %q resolved to no IPv4 addresses", source)
+		}
+		source = ips[0].String()
 	}
 
 	mountOptions := []string{

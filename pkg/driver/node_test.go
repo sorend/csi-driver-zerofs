@@ -2,6 +2,8 @@ package driver
 
 import (
 	"context"
+	"errors"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -63,6 +65,87 @@ var _ = ginkgo.Describe("NodeServer", func() {
 	})
 
 	ginkgo.Context("NodeStageVolume", func() {
+		ginkgo.DescribeTable("should use a stable 9P mount source",
+			func(addresses map[string]string, expected, lookupHost string) {
+				fakeMounter := mount.NewFakeMounter(nil)
+				ns.mounter.Interface = fakeMounter
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				lookups := 0
+				ns.lookupIP = func(lookupCtx context.Context, network, host string) ([]net.IP, error) {
+					lookups++
+					gomega.Expect(lookupHost).NotTo(gomega.BeEmpty(), "numeric mount sources should not require DNS")
+					gomega.Expect(lookupCtx).To(gomega.Equal(ctx))
+					gomega.Expect(network).To(gomega.Equal("ip4"))
+					gomega.Expect(host).To(gomega.Equal(lookupHost))
+					return []net.IP{net.ParseIP("10.43.0.3")}, nil
+				}
+				stagingPath, err := os.MkdirTemp("", "zerofs-source-")
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				defer os.RemoveAll(stagingPath)
+				volumeContext := mergeMapCopy(addresses)
+				volumeContext["protocol"] = "ninep"
+				volumeContext["port"] = "5564"
+				_, err = ns.NodeStageVolume(ctx, &csi.NodeStageVolumeRequest{
+					VolumeId:          "test-volume",
+					StagingTargetPath: stagingPath,
+					VolumeContext:     volumeContext,
+					VolumeCapability: &csi.VolumeCapability{
+						AccessType: &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{}},
+						AccessMode: &csi.VolumeCapability_AccessMode{Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER},
+					},
+				})
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				mounts, err := fakeMounter.List()
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(mounts).To(gomega.HaveLen(1))
+				gomega.Expect(mounts[0].Device).To(gomega.Equal(expected))
+				if lookupHost == "" {
+					gomega.Expect(lookups).To(gomega.BeZero())
+				} else {
+					gomega.Expect(lookups).To(gomega.Equal(1))
+				}
+			},
+			ginkgo.Entry("Service IP wins over a stale Pod IP and hostname",
+				map[string]string{"serverIP": "10.43.0.1", "podIP": "10.42.0.99", "server": "zerofs.example.invalid"}, "10.43.0.1", ""),
+			ginkgo.Entry("Service IP works without a Pod IP",
+				map[string]string{"serverIP": "10.43.0.1"}, "10.43.0.1", ""),
+			ginkgo.Entry("server address wins over a stale Pod IP when Service IP is absent",
+				map[string]string{"server": "10.43.0.2", "podIP": "10.42.0.99"}, "10.43.0.2", ""),
+			ginkgo.Entry("Service DNS is resolved before mounting even with a stale Pod IP",
+				map[string]string{"server": "zerofs.example.invalid", "podIP": "10.42.0.99"}, "10.43.0.3", "zerofs.example.invalid"),
+			ginkgo.Entry("hostname-only volumes resolve without a Pod IP",
+				map[string]string{"server": "zerofs.example.invalid"}, "10.43.0.3", "zerofs.example.invalid"),
+			ginkgo.Entry("legacy Pod-IP-only volumes still mount",
+				map[string]string{"podIP": "10.42.0.1"}, "10.42.0.1", ""),
+		)
+
+		ginkgo.DescribeTable("should not fall back to a stale Pod IP when Service DNS fails",
+			func(lookupErr error, expectedCode codes.Code) {
+				fakeMounter := mount.NewFakeMounter(nil)
+				ns.mounter.Interface = fakeMounter
+				ns.lookupIP = func(context.Context, string, string) ([]net.IP, error) {
+					return nil, lookupErr
+				}
+				_, err := ns.stageNinepVolume(context.Background(), "test-volume", "zerofs.example.invalid", "5564", "/", "/stage",
+					map[string]string{"podIP": "10.42.0.99"}, nil)
+				gomega.Expect(status.Code(err)).To(gomega.Equal(expectedCode))
+				gomega.Expect(fakeMounter.GetLog()).To(gomega.BeEmpty())
+			},
+			ginkgo.Entry("lookup failure", errors.New("DNS unavailable"), codes.Internal),
+			ginkgo.Entry("empty answer", nil, codes.Internal),
+			ginkgo.Entry("cancellation", context.Canceled, codes.Canceled),
+			ginkgo.Entry("deadline", context.DeadlineExceeded, codes.DeadlineExceeded),
+		)
+
+		ginkgo.It("should reject a 9P volume without any server address", func() {
+			fakeMounter := mount.NewFakeMounter(nil)
+			ns.mounter.Interface = fakeMounter
+			_, err := ns.stageNinepVolume(context.Background(), "test-volume", "", "5564", "/", "/stage", nil, nil)
+			gomega.Expect(status.Code(err)).To(gomega.Equal(codes.InvalidArgument))
+			gomega.Expect(fakeMounter.GetLog()).To(gomega.BeEmpty())
+		})
+
 		ginkgo.DescribeTable("should pass effective mount options to the mounter",
 			func(protocol string, volumeOptions string, flags, expected []string) {
 				fakeMounter := mount.NewFakeMounter(nil)

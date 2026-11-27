@@ -213,7 +213,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          bats test/integration-test.bats
+          make integration-test
 
       - name: Dump debug info on failure
         if: failure()
