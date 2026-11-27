@@ -89,6 +89,22 @@ the node plugin does not change mounts already in use: stop all consumers of
 the affected PVC, allow kubelet to unstage it, then restart them. Changing only
 a StorageClass does not update existing PVs.
 
+### 9P server addresses and restarts
+
+9P uses TCP to the per-volume ZeroFS Service. The node plugin prefers the
+Service's stable `serverIP` over the `podIP` recorded when the volume was
+provisioned, because Pod IPs can change even after a node reboot. Existing PVs
+with both addresses do not need to be recreated. If only a `server` hostname is
+available, the plugin resolves it to IPv4 before mounting; the kernel mount
+does not resolve Service DNS names itself. Pod-IP-only legacy volumes remain
+supported, but their addresses are not stable across server replacements.
+
+A Service lets **new mounts** reach a replacement server. It does not repair an
+already-open 9P TCP session or restore its server-side file handles: a broken
+mount may still need all consumers stopped and the volume unstaged/remounted.
+Same-node TCP traffic stays on the node; cross-node traffic uses the cluster
+network. The address fix does not change workload/server placement.
+
 ## StorageClass Parameters
 
 | Parameter | Description | Default |
@@ -109,6 +125,7 @@ Credentials must come from a Secret (raw keys in parameters are ignored).
 make test         # unit tests
 make sanity-test  # csi-sanity suite against the driver in a kind cluster
 make e2e-test     # Kubernetes external storage e2e suite in a kind cluster
+make integration-test # PVC lifecycle suite in a prepared kind-zerofs-integration cluster
 ```
 
 `make sanity-test` creates a throwaway kind cluster, deploys the driver with a
@@ -119,6 +136,12 @@ suite against it. See [test/sanity/README.md](test/sanity/README.md) for details
 (`test/e2e/storage/external`) against the driver. It needs several nodes to
 exercise the multi-node tests, so it uses a dedicated three-worker kind
 config. See [test/e2e/README.md](test/e2e/README.md) for details.
+
+`make integration-test` uses the setup described in
+[`test/integration-test.bats`](test/integration-test.bats). Its 9P regression
+stops and fully unstages the consumer, replaces the server with a different Pod
+IP, and verifies a fresh mount, persisted data and new writes without editing
+the original PV's stale `podIP`.
 
 To check an existing **test pod** with Python 3 and a volume mounted at `/data`:
 
